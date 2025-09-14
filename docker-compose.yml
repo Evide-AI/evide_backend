@@ -1,0 +1,53 @@
+
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000" #API Server
+      - "8080:8080" #TCP Server
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - API_PORT=${API_PORT}
+      - TCP_PORT=${TCP_PORT}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    volumes:
+      - .:/app
+      - /app/node_modules
+    restart: unless-stopped
+    networks:
+      - evide-network
+    
+  postgres:
+    image: postgres:17
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    ports:
+      - "${DB_EXTERNAL_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    networks:
+      - evide-network
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  postgres_data:
+networks:
+  evide-network:
+    driver: bridge
