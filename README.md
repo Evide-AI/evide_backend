@@ -11,12 +11,12 @@ Backend system for GPS tracking with Express API server and TCP server for devic
 - cd evide_backend
 - set up the .env file (See template below)
 
-# Server Configuration
+#### Server Configuration
 NODE_ENV=
 API_PORT=
 TCP_PORT=
 
-# Database Configuration
+#### Database Configuration
 DB_EXTERNAL_PORT=5432 # Change this if port 5432 is already in use
 DB_NAME=
 DB_USER=
