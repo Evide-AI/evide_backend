@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import Admin from "../models/Admin.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key";
+const JWT_SECRET = process.env.JWT_SECRET;
 
 export const generateToken = (userId, role, userType = "admin") => {
   return jwt.sign(
@@ -36,8 +36,15 @@ export const authenticate = (allowedUserTypes) => {
       }
 
       // Check 2 for token in cookies for Web Browsers
-      if (!token && req.cookies && req.cookies.adminToken) {
-        token = req.cookies.adminToken;
+      // Try different cookie names based on allowed user types
+      if (!token && req.cookies) {
+        for (const userType of allowedUserTypes) {
+          const cookieName = `${userType}Token`;
+          if (req.cookies[cookieName]) {
+            token = req.cookies[cookieName];
+            break;
+          }
+        }
       }
 
       // Check 3 in x-access-token header
