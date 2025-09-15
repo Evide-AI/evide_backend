@@ -185,3 +185,55 @@ const getUserByType = async (userType, email = null, id = null) => {
       return null;
   }
 };
+
+export const refreshToken = async (req, res) => {
+  try {
+    const { userType, id } = req.user;
+
+    const user = await getUserByType(userType, null, id);
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: `${
+          userType.charAt(0).toUpperCase() + userType.slice(1)
+        } not found or inactive`,
+        code: "INVALID_USER",
+      });
+    }
+
+    const newToken = generateToken(user.id, user.role, userType);
+
+    const isMobile = isMobileClient(req);
+    const cookieName = `${userType}Token`;
+
+    if (!isMobile && !req.headers["x-no-cookies"]) {
+      res.cookie(cookieName, newToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 24 * 60 * 60 * 1000,
+        path: "/",
+      });
+    }
+
+    const responseData = {
+      success: true,
+      message: "Token refreshed successfully",
+      userType,
+    };
+
+    if (isMobile || req.headers["x-include-token"] === "true") {
+      responseData.token = newToken;
+    }
+
+    res.status(200).json(responseData);
+  } catch (error) {
+    console.error("Refresh token error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error during token refresh",
+      code: "REFRESH_ERROR",
+    });
+  }
+};
