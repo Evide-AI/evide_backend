@@ -30,10 +30,10 @@ export const login = async (req, res) => {
 
     const user = await getUserByType(userType, email);
     if (!user) {
-      return res.status(401).json({
+      return res.status(404).json({
         success: false,
-        message: "Invalid email or password",
-        code: "INVALID_CREDENTIALS",
+        message: "User not found. Please check your email address.",
+        code: "USER_NOT_FOUND",
       });
     }
 
@@ -41,8 +41,8 @@ export const login = async (req, res) => {
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email or password",
-        code: "INVALID_CREDENTIALS",
+        message: "Invalid password. Please check your password.",
+        code: "INVALID_PASSWORD",
       });
     }
 
