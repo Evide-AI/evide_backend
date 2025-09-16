@@ -6,6 +6,96 @@ import {
 
 export const allowedUserTypes = ["admin"]; // Add new user types when needed
 
+export const register = async (req, res) => {
+  try {
+    const { email, password, userType } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required",
+        code: "MISSING_CREDENTIALS",
+      });
+    }
+
+    // For now, we allow admins as well, but in future we would retrict userType === admin for register route
+    if (!allowedUserTypes.includes(userType)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid user type. Allowed types: ${allowedUserTypes.join(
+          ", "
+        )}`,
+        code: "INVALID_USER_TYPE",
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await getUserByType(userType, email);
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: "User with this email already exists",
+        code: "USER_ALREADY_EXISTS",
+      });
+    }
+
+    let newUser;
+    switch (userType) {
+      case "admin":
+        newUser = await Admin.create({
+          email: email.toLowerCase(),
+          password,
+          role: "admin",
+        });
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          message: "Invalid user type for registration",
+          code: "INVALID_USER_TYPE",
+        });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `${
+        userType.charAt(0).toUpperCase() + userType.slice(1)
+      } registered successfully`,
+      userType,
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        role: newUser.role,
+        createdAt: newUser.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Registration error:", error);
+
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(409).json({
+        success: false,
+        message: "User with this email already exists",
+        code: "USER_ALREADY_EXISTS",
+      });
+    }
+
+    if (error.name === "SequelizeValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: error.errors.map((e) => e.message).join(", "),
+        code: "VALIDATION_ERROR",
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Internal server error during registration",
+      code: "REGISTRATION_ERROR",
+    });
+  }
+};
+
 export const login = async (req, res) => {
   try {
     const { email, password, userType } = req.body;
