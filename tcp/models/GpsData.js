@@ -1,6 +1,10 @@
 import { DataTypes } from "sequelize"
 import { sequelize } from "../../config/db.js"
 
+// WGS84 - a coordinate system that uses latitude and longitude in degrees
+// it's the standard
+const COORDINATE_SYSTEM = 4326
+
 const GpsData = sequelize.define(
   "GpsData",
   {
@@ -17,8 +21,8 @@ const GpsData = sequelize.define(
       type: DataTypes.UUID,
     },
     location: {
-      type: DataTypes.GEOGRAPHY('POINT', 4326),
-      allowNull: false
+      type: DataTypes.GEOGRAPHY("POINT", COORDINATE_SYSTEM),
+      allowNull: false,
     },
     speed: {
       type: DataTypes.INTEGER,

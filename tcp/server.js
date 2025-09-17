@@ -19,10 +19,12 @@ const server = net.createServer((client) => {
       return
     }
 
+    // not all packets need a response (eg: location)
     if (gt06.expectsResponse) {
       client.write(gt06.responseMsg)
     }
 
+    // buffer messages to add it to postgres in bulk
     const locationMessages = gt06.msgBuffer
       .filter((msg) => msg.event.number === 0x12)
       .map((msg) => ({
@@ -58,6 +60,7 @@ server.on("error", (err) => {
   console.error("Server error:", err)
 })
 
+// ensure DB is up before starting server
 async function startTcpServer() {
   try {
     console.log("Starting TCP Server...")

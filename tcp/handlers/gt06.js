@@ -1,5 +1,7 @@
 import getCrc16 from "./crc16.js"
 
+const MIN_PACKET_LEN = 10
+
 class Gt06 {
   constructor() {
     this.msgBufferRaw = Buffer.alloc(0)
@@ -10,9 +12,11 @@ class Gt06 {
   // if multiple message are in the buffer, it will store them in msgBuffer
   // the state of the last message will be represented in Gt06
   parse(data) {
+    // new data is concatenated with any leftover already in buffer
+    // TCP is stream-based so an entire packet may not arrive at once
     this.msgBufferRaw = Buffer.concat([this.msgBufferRaw, data])
 
-    while (this.msgBufferRaw.length >= 7) {
+    while (this.msgBufferRaw.length >= MIN_PACKET_LEN) {
       const parsed = { expectsResponse: false }
       if (this.msgBufferRaw.readUInt16BE(0) !== 0x7878) {
         this.msgBufferRaw = this.msgBufferRaw.slice(1)
@@ -20,7 +24,7 @@ class Gt06 {
       }
 
       const length = this.msgBufferRaw.readUInt8(2)
-      const totalLen = length + 7
+      const totalLen = length + MIN_PACKET_LEN
 
       if (this.msgBufferRaw.length < totalLen) {
         break
@@ -36,10 +40,10 @@ class Gt06 {
 
       switch (selectEvent(msg).number) {
         case 0x01: // login message
-          const loginData = parseLogin(msg);
+          const loginData = parseLogin(msg)
           if (!loginData) {
-              console.warn("Invalid login message received.");
-              break; // Skip this message
+            console.warn("Invalid login message received.")
+            break
           }
           Object.assign(parsed, loginData)
           parsed.imei = parsed.imei
@@ -101,13 +105,14 @@ function selectEvent(data) {
 }
 
 function parseLogin(data) {
-    if (data[2] !== (1 + 8 + 2)) { // proto + imei + serial
-        return null;
-    }
-    return {
-        imei: BigInt("0x" + data.slice(4, 12).toString("hex")).toString(),
-        serialNumber: data.readUInt16BE(12),
-    }
+  if (data[2] !== 1 + 8 + 2) {
+    // proto + imei + serial
+    return null
+  }
+  return {
+    imei: BigInt("0x" + data.slice(4, 12).toString("hex")).toString(),
+    serialNumber: data.readUInt16BE(12),
+  }
 }
 
 function parseStatus(data) {

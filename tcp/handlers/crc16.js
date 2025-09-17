@@ -32,6 +32,7 @@ const crc16Table = new Uint16Array([
 
 const crc16Buffer = Buffer.from(crc16Table.buffer)
 
+// cyclic redundancy check (CRC) implementation according to the GT06 protocol spec
 export default function getCrc16(input) {
   let fcs = 0xffff
   for (let i = 0; i < input.length; i++) {
