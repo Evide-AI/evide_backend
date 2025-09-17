@@ -2,7 +2,7 @@ import getCrc16 from "./crc16.js"
 
 class Gt06 {
   constructor() {
-    this.msgBufferRaw = []
+    this.msgBufferRaw = Buffer.alloc(0)
     this.msgBuffer = []
     this.imei = null
   }
@@ -10,24 +10,38 @@ class Gt06 {
   // if multiple message are in the buffer, it will store them in msgBuffer
   // the state of the last message will be represented in Gt06
   parse(data) {
-    this.msgBufferRaw.length = 0
-    const parsed = { expectsResponse: false }
+    this.msgBufferRaw = Buffer.concat([this.msgBufferRaw, data])
 
-    if (!checkHeader(data)) {
-      throw { error: "unknown message header", msg: data }
-    }
+    while (this.msgBufferRaw.length >= 7) {
+      const parsed = { expectsResponse: false }
+      if (this.msgBufferRaw.readUInt16BE(0) !== 0x7878) {
+        this.msgBufferRaw = this.msgBufferRaw.slice(1)
+        continue
+      }
 
-    //get all the packets from buffer as an array
-    this.msgBufferRaw = sliceMsgsInBuff(data).slice()
-    this.msgBufferRaw.forEach((msg, idx) => {
+      const length = this.msgBufferRaw.readUInt8(2)
+      const totalLen = length + 7
+
+      if (this.msgBufferRaw.length < totalLen) {
+        break
+      }
+
+      const msg = this.msgBufferRaw.slice(0, totalLen)
+
       if (!validateCrc(msg)) {
         console.warn("CRC mismatch, skipping packet", msg.toString("hex"))
-        return
+        this.msgBufferRaw = this.msgBufferRaw.slice(totalLen)
+        continue
       }
 
       switch (selectEvent(msg).number) {
         case 0x01: // login message
-          Object.assign(parsed, parseLogin(msg))
+          const loginData = parseLogin(msg);
+          if (!loginData) {
+              console.warn("Invalid login message received.");
+              break; // Skip this message
+          }
+          Object.assign(parsed, loginData)
           parsed.imei = parsed.imei
           parsed.expectsResponse = true
           parsed.responseMsg = createResponse(msg)
@@ -45,17 +59,14 @@ class Gt06 {
           break
         default:
           console.warn("unknown message type, skipping", selectEvent(msg))
-          return
+          break
       }
       parsed.event = selectEvent(msg)
       parsed.parseTime = Date.now()
-      // last message represents the obj state
-      // and all go to the buffer for looped forwarding in the app
-      if (idx === this.msgBufferRaw.length - 1) {
-        Object.assign(this, parsed)
-      }
+      Object.assign(this, parsed)
       this.msgBuffer.push(parsed)
-    })
+      this.msgBufferRaw = this.msgBufferRaw.slice(totalLen)
+    }
   }
 
   clearMsgBuffer() {
@@ -64,14 +75,6 @@ class Gt06 {
 }
 
 export default Gt06
-
-function checkHeader(data) {
-  const header = data.slice(0, 2)
-  if (!header.equals(Buffer.from("7878", "hex"))) {
-    return false
-  }
-  return true
-}
 
 function selectEvent(data) {
   let eventStr = "unknown"
@@ -98,10 +101,13 @@ function selectEvent(data) {
 }
 
 function parseLogin(data) {
-  return {
-    imei: parseInt(data.slice(4, 12).toString("hex"), 10),
-    serialNumber: data.readUInt16BE(12),
-  }
+    if (data[2] !== (1 + 8 + 2)) { // proto + imei + serial
+        return null;
+    }
+    return {
+        imei: BigInt("0x" + data.slice(4, 12).toString("hex")).toString(),
+        serialNumber: data.readUInt16BE(12),
+    }
 }
 
 function parseStatus(data) {
@@ -270,7 +276,7 @@ function parseAlarm(data) {
     eastLongitude: !Boolean(datasheet.course & 0x0800),
     northLatitude: Boolean(datasheet.course & 0x0400),
     course: datasheet.course & 0x3ff,
-    mmc: datasheet.mnc,
+    mnc: datasheet.mnc,
     cellId: datasheet.cellId,
     terminalInfo: datasheet.terminalInfo,
     voltageLevel: datasheet.voltageLevel,
@@ -331,28 +337,4 @@ function validateCrc(msg) {
   const msgCrc = msg.readUInt16BE(msg.length - 4)
   const calcCrc = getCrc16(msg.slice(2, msg.length - 4)).readUInt16BE(0)
   return msgCrc === calcCrc
-}
-
-function sliceMsgsInBuff(data) {
-  const startPattern = new Buffer.from("7878", "hex")
-  let nextStart = data.indexOf(startPattern, 2)
-  const msgArray = []
-
-  if (nextStart === -1) {
-    msgArray.push(new Buffer.from(data))
-    return msgArray
-  }
-  msgArray.push(new Buffer.from(data.slice(0, nextStart)))
-  let redMsgBuff = new Buffer.from(data.slice(nextStart))
-
-  while (nextStart != -1) {
-    nextStart = redMsgBuff.indexOf(startPattern, 2)
-    if (nextStart === -1) {
-      msgArray.push(new Buffer.from(redMsgBuff))
-      return msgArray
-    }
-    msgArray.push(new Buffer.from(redMsgBuff.slice(0, nextStart)))
-    redMsgBuff = new Buffer.from(redMsgBuff.slice(nextStart))
-  }
-  return msgArray
 }

@@ -30,7 +30,7 @@ const crc16Table = new Uint16Array([
   0x3de3, 0x2c6a, 0x1ef1, 0x0f78,
 ])
 
-const crc16Buffer = new Buffer.from(crc16Table.buffer)
+const crc16Buffer = Buffer.from(crc16Table.buffer)
 
 export default function getCrc16(input) {
   let fcs = 0xffff
@@ -38,7 +38,7 @@ export default function getCrc16(input) {
     let index = ((fcs ^ input.readUInt8(i)) & 0xff) * 2
     fcs = (fcs >> 8) ^ crc16Buffer.readUInt16LE(index)
   }
-  let ret = new Buffer.alloc(2)
+  let ret = Buffer.alloc(2)
   ret.writeUInt16BE(~fcs & 0xffff) // negate return
   return ret
 }

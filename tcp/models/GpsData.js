@@ -10,24 +10,18 @@ const GpsData = sequelize.define(
       primaryKey: true,
     },
     bus_id: {
-      type: DataTypes.UUID,
+      type: DataTypes.STRING,
       allowNull: false,
     },
     route_id: {
       type: DataTypes.UUID,
-      allowNull: false,
     },
-    latitude: {
-      type: DataTypes.FLOAT,
-      allowNull: false,
-    },
-    longitude: {
-      type: DataTypes.FLOAT,
-      allowNull: false,
+    location: {
+      type: DataTypes.GEOGRAPHY('POINT', 4326),
+      allowNull: false
     },
     speed: {
       type: DataTypes.INTEGER,
-      allowNull: true,
     },
     last_updated: {
       type: DataTypes.DATE,
