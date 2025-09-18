@@ -4,8 +4,10 @@ import {
   isMobileClient,
 } from "../middlewares/authMiddleware.js";
 
+// Define allowed user types for the system
 export const allowedUserTypes = ["admin"]; // Add new user types when needed
 
+// Register new user
 export const register = async (req, res) => {
   try {
     const { email, password, userType } = req.body;
@@ -18,7 +20,7 @@ export const register = async (req, res) => {
       });
     }
 
-    // For now, we allow admins as well, but in future we would retrict userType === admin for register route
+    // Validate user type
     if (!allowedUserTypes.includes(userType)) {
       return res.status(400).json({
         success: false,
@@ -39,6 +41,7 @@ export const register = async (req, res) => {
       });
     }
 
+    // Create new user based on their type
     let newUser;
     switch (userType) {
       case "admin":
@@ -118,6 +121,7 @@ export const login = async (req, res) => {
       });
     }
 
+    // Find user by type and email
     const user = await getUserByType(userType, email);
     if (!user) {
       return res.status(404).json({
@@ -127,6 +131,7 @@ export const login = async (req, res) => {
       });
     }
 
+    // Verify password
     const isPasswordValid = await user.checkPassword(password);
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -136,8 +141,10 @@ export const login = async (req, res) => {
       });
     }
 
+    // Generate JWT token
     const token = generateToken(user.id, user.role, userType);
 
+    // Update last login timestamp
     await user.update({ lastLogin: new Date() });
 
     const isMobile = isMobileClient(req);
@@ -166,7 +173,7 @@ export const login = async (req, res) => {
       },
     };
 
-    // Including token in response for mobile or when requested
+    // Include token in response for mobile or when requested
     if (isMobile || req.headers["x-include-token"] === "true") {
       responseData.token = token;
       responseData.authMethod = "token";
@@ -185,11 +192,13 @@ export const login = async (req, res) => {
   }
 };
 
+// Logout user and clear authentication
 export const logout = async (req, res) => {
   try {
     const userType = req.user?.userType;
     const cookieName = `${userType}Token`;
 
+    // Clear authentication cookie if exists
     if (req.cookies && req.cookies[cookieName]) {
       res.clearCookie(cookieName, {
         httpOnly: true,
@@ -205,9 +214,7 @@ export const logout = async (req, res) => {
       userType,
     });
 
-    // For mobile apps or browsers,
-    // the token stored in local storage must be cleared
-    // from their side
+    // Note: Mobile apps must clear tokens from local storage on their side
   } catch (error) {
     console.error("Logout error:", error);
     res.status(500).json({
@@ -218,10 +225,12 @@ export const logout = async (req, res) => {
   }
 };
 
+// Get current user's profile information
 export const getProfile = async (req, res) => {
   try {
     const { userType, id } = req.user;
 
+    // Fetch user data by type and ID
     const user = await getUserByType(userType, null, id);
 
     if (!user) {
@@ -255,6 +264,7 @@ export const getProfile = async (req, res) => {
   }
 };
 
+// Helper function to get user by type and email/ID
 const getUserByType = async (userType, email = null, id = null) => {
   const whereClause = {};
 
@@ -265,6 +275,7 @@ const getUserByType = async (userType, email = null, id = null) => {
     whereClause.id = id;
   }
 
+  // Switch based on user type - add new cases for additional user types
   switch (userType) {
     case "admin":
       return id
@@ -276,10 +287,12 @@ const getUserByType = async (userType, email = null, id = null) => {
   }
 };
 
+// Refresh JWT token for authenticated user
 export const refreshToken = async (req, res) => {
   try {
     const { userType, id } = req.user;
 
+    // Verify user still exists and is active
     const user = await getUserByType(userType, null, id);
 
     if (!user) {
@@ -292,11 +305,13 @@ export const refreshToken = async (req, res) => {
       });
     }
 
+    // Generate new token
     const newToken = generateToken(user.id, user.role, userType);
 
     const isMobile = isMobileClient(req);
     const cookieName = `${userType}Token`;
 
+    // Set new cookie for web browsers
     if (!isMobile && !req.headers["x-no-cookies"]) {
       res.cookie(cookieName, newToken, {
         httpOnly: true,
@@ -313,6 +328,7 @@ export const refreshToken = async (req, res) => {
       userType,
     };
 
+    // Include new token in response for mobile or when requested
     if (isMobile || req.headers["x-include-token"] === "true") {
       responseData.token = newToken;
     }

@@ -8,7 +8,13 @@ import busRoutes from "./routes/busRoutes.js";
 
 const app = express();
 
-app.use(cors());
+const corsOptions = {
+  origin: ["http://localhost:3000", "http://localhost:3001"],
+  credentials: true,
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

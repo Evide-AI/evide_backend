@@ -1,12 +1,14 @@
 import Bus from "../models/Bus.js";
 import { Op } from "sequelize";
 
+// Get all buses with optional search functionality
 export const getBuses = async (req, res) => {
   try {
     const { search = "" } = req.query;
 
     const whereClause = {};
 
+    // Search across bus name, number, and IMEI if search term provided
     if (search) {
       whereClause[Op.or] = [
         { bus_name: { [Op.iLike]: `%${search}%` } },
@@ -17,7 +19,7 @@ export const getBuses = async (req, res) => {
 
     const buses = await Bus.findAll({
       where: whereClause,
-      order: [["createdAt", "DESC"]],
+      order: [["createdAt", "DESC"]], // Latest buses first
     });
 
     res.status(200).json({
@@ -37,6 +39,7 @@ export const getBuses = async (req, res) => {
   }
 };
 
+// Get a single bus by its ID
 export const getBusById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -65,10 +68,12 @@ export const getBusById = async (req, res) => {
   }
 };
 
+// Create a new bus with optional trip data
 export const createBus = async (req, res) => {
   try {
-    const { bus_name, bus_number, IMEI } = req.body;
+    const { bus_name, bus_number, IMEI, trip_data } = req.body;
 
+    // Check required fields
     if (!bus_name || !bus_number || !IMEI) {
       return res.status(400).json({
         success: false,
@@ -77,7 +82,7 @@ export const createBus = async (req, res) => {
       });
     }
 
-    // IMEI numbers limit should be 15 digits
+    // Validate IMEI format (must be exactly 15 digits)
     if (!/^\d{15}$/.test(IMEI)) {
       return res.status(400).json({
         success: false,
@@ -86,6 +91,7 @@ export const createBus = async (req, res) => {
       });
     }
 
+    // Check if bus number or IMEI already exists
     const existingBus = await Bus.findOne({
       where: {
         [Op.or]: [{ bus_number: bus_number.trim() }, { IMEI: IMEI.trim() }],
@@ -102,11 +108,19 @@ export const createBus = async (req, res) => {
       });
     }
 
-    const bus = await Bus.create({
+    // Prepare bus data
+    const busData = {
       bus_name: bus_name.trim(),
       bus_number: bus_number.trim().toUpperCase(),
       IMEI: IMEI.trim(),
-    });
+    };
+
+    // Add trip data if provided (optional field)
+    if (trip_data) {
+      busData.trip_data = trip_data;
+    }
+
+    const bus = await Bus.create(busData);
 
     res.status(201).json({
       success: true,
@@ -136,11 +150,13 @@ export const createBus = async (req, res) => {
   }
 };
 
+// Update an existing bus
 export const updateBus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { bus_name, bus_number, IMEI } = req.body;
+    const { bus_name, bus_number, IMEI, trip_data } = req.body;
 
+    // Check if bus exists
     const bus = await Bus.findByPk(id);
     if (!bus) {
       return res.status(404).json({
@@ -152,6 +168,7 @@ export const updateBus = async (req, res) => {
 
     const updateData = {};
 
+    // Update only provided fields
     if (bus_name !== undefined) updateData.bus_name = bus_name.trim();
     if (bus_number !== undefined)
       updateData.bus_number = bus_number.trim().toUpperCase();
@@ -166,8 +183,9 @@ export const updateBus = async (req, res) => {
       }
       updateData.IMEI = IMEI.trim();
     }
+    if (trip_data !== undefined) updateData.trip_data = trip_data;
 
-    // Check for duplicates (excluding current bus)
+    // Prevent duplicate bus_number or IMEI by checking other buses (excluding current one)
     if (updateData.bus_number || updateData.IMEI) {
       const duplicateCheck = {};
       if (updateData.bus_number)
@@ -226,10 +244,12 @@ export const updateBus = async (req, res) => {
   }
 };
 
+// Delete a bus by ID
 export const deleteBus = async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Check if bus exists before deleting
     const bus = await Bus.findByPk(id);
     if (!bus) {
       return res.status(404).json({

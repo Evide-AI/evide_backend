@@ -33,6 +33,25 @@ const Bus = sequelize.define(
         isNumeric: true,
       },
     },
+    // Trip data stores array of trips with start/end times and stops
+    // Structure: [{ startTime, endTime, stops: [{ stopName, latitude, longitude }] }]
+    trip_data: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: [
+        {
+          startTime: null,
+          endTime: null,
+          stops: [
+            {
+              stopName: null,
+              latitude: null,
+              longitude: null,
+            },
+          ],
+        },
+      ],
+    },
   },
   {
     tableName: "buses",
