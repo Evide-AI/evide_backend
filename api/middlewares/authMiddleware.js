@@ -1,24 +1,7 @@
 import jwt from "jsonwebtoken";
-import Admin from "../models/Admin.js";
+import User from "../models/User.js";
 
 const JWT_SECRET = process.env.JWT_SECRET;
-
-// Generate JWT token with user information
-export const generateToken = (userId, role, userType) => {
-  return jwt.sign(
-    {
-      userId,
-      role,
-      userType,
-      type: "access",
-    },
-    JWT_SECRET,
-    {
-      expiresIn: process.env.JWT_EXPIRES_IN,
-      issuer: "evide-backend",
-    }
-  );
-};
 
 // Authentication middleware - checks for valid JWT token
 export const authenticate = (allowedUserTypes) => {
@@ -76,7 +59,9 @@ export const authenticate = (allowedUserTypes) => {
       }
 
       // Verify user still exists in database
-      const user = await getUserByType(decoded.userType, decoded.userId);
+      const user = await User.findOne({
+        where: { id: decoded.userId, role: decoded.userType },
+      });
       if (!user) {
         return res.status(401).json({
           success: false,
@@ -102,7 +87,6 @@ export const authenticate = (allowedUserTypes) => {
     } catch (error) {
       console.error("Authentication error:", error);
 
-      // Handle specific JWT errors with clear messages
       if (error.name === "TokenExpiredError") {
         return res.status(401).json({
           success: false,
@@ -126,37 +110,4 @@ export const authenticate = (allowedUserTypes) => {
       });
     }
   };
-};
-
-// Helper function to get user by type - extensible for new user types
-const getUserByType = async (userType, userId) => {
-  switch (userType) {
-    case "admin":
-      return await Admin.findByPk(userId);
-
-    // Add new user types here as needed
-    default:
-      return null;
-  }
-};
-
-// Detect if request is from mobile client
-export const isMobileClient = (req) => {
-  const userAgent = req.headers["user-agent"] || "";
-  const mobileIndicators = [
-    "Mobile",
-    "Android",
-    "iPhone",
-    "iPad",
-    "BlackBerry",
-    "Windows Phone",
-    "Opera Mini",
-    "IEMobile",
-  ];
-
-  // Check user agent or explicit mobile header
-  return (
-    mobileIndicators.some((indicator) => userAgent.includes(indicator)) ||
-    req.headers["x-mobile-client"] === "true"
-  );
 };

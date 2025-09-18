@@ -3,11 +3,11 @@ import {
   register,
   login,
   logout,
-  getProfile,
-  refreshToken,
   allowedUserTypes,
 } from "../controllers/authController.js";
+
 import { authenticate } from "../middlewares/authMiddleware.js";
+import { refreshToken } from "../utils/tokenUtils.js";
 
 const router = express.Router();
 
@@ -57,16 +57,6 @@ router.use(authenticate(allowedUserTypes));
  * @returns {Object} Success message confirming logout
  */
 router.post("/logout", logout);
-
-/**
- * @route GET /api/auth/profile
- * @desc Get current authenticated user's profile information
- * @headers {string} Authorization - Bearer JWT token (required)
- * @access Private (All user types)
- * @returns {Object} User profile data (excluding sensitive information)
- * @note Returns profile for any authenticated user type
- */
-router.get("/profile", getProfile);
 
 /**
  * @route POST /api/auth/refresh-token
