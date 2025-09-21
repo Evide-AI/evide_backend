@@ -2,7 +2,7 @@ import express from "express";
 import {
   getBuses,
   getBusById,
-  createBus,
+  addBus,
   updateBus,
   deleteBus,
 } from "../controllers/busController.js";
@@ -18,55 +18,53 @@ const router = express.Router();
 router.use(authenticate(["admin"]));
 
 /**
- * @route GET /api/buses
- * @desc Get all buses with optional search functionality
- * @query {string} search - Optional search term (bus name, number, or IMEI)
- * @access Private (Admin)
- * @returns {Object} List of buses with count
- */
-router.get("/", getBuses);
-
-/**
- * @route GET /api/buses/:id
- * @desc Get single bus by ID
- * @param {string} id - Bus ID
- * @access Private (Admin)
- * @returns {Object} Single bus object
- */
-router.get("/:id", getBusById);
-
-/**
  * @route POST /api/buses
- * @desc Create new bus
- * @body {string} bus_name - Bus name (required)
+ * @desc Create new bus with complete route, stops, and trip data - ALL FIELDS MANDATORY
  * @body {string} bus_number - Bus number (required, unique)
- * @body {string} IMEI - 15-digit IMEI number (required, unique)
- * @body {Array} trip_data - Optional trip data array
+ * @body {string} imei_number - 15-digit IMEI number (required, unique)
+ * @body {string} name - Bus name (required)
+ * @body {string} route_name - Route name (required)
+ * @body {number} total_distance_km - Total route distance in km (required)
+ * @body {Array} stops - Array of stop objects with coordinates (required, min 1)
+ * @body {Array} trips - Array of trip schedules (required, min 1)
+ * @example
+ * {
+ *   "bus_number": "KA05MN1234",
+ *   "imei_number": "123456789012345",
+ *   "name": "City Express Bus",
+ *   "route_name": "Airport to City Center",
+ *   "total_distance_km": 25.5,
+ *   "stops": [
+ *     {
+ *       "name": "Airport Terminal",
+ *       "latitude": 12.9698,
+ *       "longitude": 77.7500,
+ *       "sequence_order": 1,
+ *       "travel_time_from_previous_stop_min": 0,
+ *       "travel_distance_from_previous_stop": 0,
+ *       "dwell_time_minutes": 3
+ *     },
+ *     {
+ *       "name": "City Center",
+ *       "latitude": 12.9716,
+ *       "longitude": 77.5946,
+ *       "sequence_order": 2,
+ *       "travel_time_from_previous_stop_min": 25,
+ *       "travel_distance_from_previous_stop": 17000,
+ *       "dwell_time_minutes": 5
+ *     }
+ *   ],
+ *   "trips": [
+ *     {
+ *       "scheduled_start_time": "2025-09-21T06:00:00Z",
+ *       "scheduled_end_time": "2025-09-21T22:00:00Z",
+ *       "trip_type": "regular"
+ *     }
+ *   ]
+ * }
  * @access Private (Admin)
- * @returns {Object} Created bus object
+ * @returns {Object} Created bus with all related data
  */
-router.post("/", createBus);
-
-/**
- * @route PUT /api/buses/:id
- * @desc Update existing bus
- * @param {string} id - Bus ID
- * @body {string} bus_name - Bus name (optional)
- * @body {string} bus_number - Bus number (optional)
- * @body {string} IMEI - 15-digit IMEI number (optional)
- * @body {Array} trip_data - Trip data array (optional)
- * @access Private (Admin)
- * @returns {Object} Updated bus object
- */
-router.put("/:id", updateBus);
-
-/**
- * @route DELETE /api/buses/:id
- * @desc Delete bus by ID
- * @param {string} id - Bus ID
- * @access Private (Admin)
- * @returns {Object} Success message
- */
-router.delete("/:id", deleteBus);
+router.post("/", addBus);
 
 export default router;

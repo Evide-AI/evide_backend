@@ -1,229 +1,235 @@
-import Bus from "../models/Bus.js";
-import { Op } from "sequelize";
+import { sequelize } from "../../config/db";
+import { Bus, Route, Stop, Trip, TripStopTime } from "../models";
 
-// Get all buses with optional search functionality
-export const getBuses = async (req, res) => {
+export const addBus = async (req, res) => {
+  const transaction = await sequelize.transaction();
+
   try {
-    const { search = "" } = req.query;
+    const {
+      // Bus details
+      bus_number,
+      imei_number,
+      name,
 
-    const whereClause = {};
+      // Route details
+      route_name,
+      total_distance_km,
 
-    // Search across bus name, number, and IMEI if search term provided
-    if (search) {
-      whereClause[Op.or] = [
-        { bus_name: { [Op.iLike]: `%${search}%` } },
-        { bus_number: { [Op.iLike]: `%${search}%` } },
-        { IMEI: { [Op.iLike]: `%${search}%` } },
-      ];
-    }
+      // Stops array with coordinates
+      stops, // Eg: [{name: "Stop1", latitude: 12.34, longitude: 56.34, rest of the data}]
 
-    const buses = await Bus.findAll({
-      where: whereClause,
-      order: [["createdAt", "DESC"]], // Latest buses first
-    });
+      // Trip data - (at least one trip)
+      trips,
+    } = req.body;
 
-    res.status(200).json({
-      success: true,
-      data: {
-        buses,
-        count: buses.length,
-      },
-    });
-  } catch (error) {
-    console.error("Get buses error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error while fetching buses",
-      code: "FETCH_BUSES_ERROR",
-    });
-  }
-};
-
-// Get a single bus by its ID
-export const getBusById = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const bus = await Bus.findByPk(id);
-
-    if (!bus) {
-      return res.status(404).json({
-        success: false,
-        message: "Bus not found",
-        code: "BUS_NOT_FOUND",
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: { bus },
-    });
-  } catch (error) {
-    console.error("Get bus by ID error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error while fetching bus",
-      code: "FETCH_BUS_ERROR",
-    });
-  }
-};
-
-// Create a new bus with optional trip data
-export const createBus = async (req, res) => {
-  try {
-    const { bus_name, bus_number, IMEI, trip_data } = req.body;
-
-    // Check required fields
-    if (!bus_name || !bus_number || !IMEI) {
+    // Validate all required fields are present
+    if (
+      !bus_number ||
+      !imei_number ||
+      !route_name ||
+      !total_distance_km ||
+      !stops ||
+      !Array.isArray(stops) ||
+      stops.length === 0 ||
+      !trips ||
+      !Array.isArray(trips) ||
+      trips.length === 0
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Bus name, bus number, and IMEI are required",
-        code: "MISSING_REQUIRED_FIELDS",
+        message:
+          "All fields are mandatory: bus_number, imei_number, route_name, total_distance_km, stops array (min 1), and trips array (min 1) are required",
       });
     }
 
-    // Validate IMEI format (must be exactly 15 digits)
-    if (!/^\d{15}$/.test(IMEI)) {
-      return res.status(400).json({
-        success: false,
-        message: "IMEI must be exactly 15 digits",
-        code: "INVALID_IMEI_FORMAT",
-      });
-    }
-
-    // Check if bus number or IMEI already exists
-    const existingBus = await Bus.findOne({
-      where: {
-        [Op.or]: [{ bus_number: bus_number.trim() }, { IMEI: IMEI.trim() }],
-      },
-    });
-
-    if (existingBus) {
-      const duplicateField =
-        existingBus.bus_number === bus_number.trim() ? "bus_number" : "IMEI";
-      return res.status(409).json({
-        success: false,
-        message: `Bus with this ${duplicateField} already exists`,
-        code: "DUPLICATE_BUS",
-      });
-    }
-
-    // Prepare bus data
-    const busData = {
-      bus_name: bus_name.trim(),
-      bus_number: bus_number.trim().toUpperCase(),
-      IMEI: IMEI.trim(),
-    };
-
-    // Add trip data if provided (optional field)
-    if (trip_data) {
-      busData.trip_data = trip_data;
-    }
-
-    const bus = await Bus.create(busData);
-
-    res.status(201).json({
-      success: true,
-      message: "Bus created successfully",
-      data: { bus },
-    });
-  } catch (error) {
-    console.error("Create bus error:", error);
-
-    if (error.name === "SequelizeValidationError") {
-      return res.status(400).json({
-        success: false,
-        message: "Validation error",
-        errors: error.errors.map((err) => ({
-          field: err.path,
-          message: err.message,
-        })),
-        code: "VALIDATION_ERROR",
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: "Internal server error while creating bus",
-      code: "CREATE_BUS_ERROR",
-    });
-  }
-};
-
-// Update an existing bus
-export const updateBus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { bus_name, bus_number, IMEI, trip_data } = req.body;
-
-    // Check if bus exists
-    const bus = await Bus.findByPk(id);
-    if (!bus) {
-      return res.status(404).json({
-        success: false,
-        message: "Bus not found",
-        code: "BUS_NOT_FOUND",
-      });
-    }
-
-    const updateData = {};
-
-    // Update only provided fields
-    if (bus_name !== undefined) updateData.bus_name = bus_name.trim();
-    if (bus_number !== undefined)
-      updateData.bus_number = bus_number.trim().toUpperCase();
-    if (IMEI !== undefined) {
-      // Validate IMEI format
-      if (!/^\d{15}$/.test(IMEI.trim())) {
+    // Validate stops array structure
+    for (let i = 0; i < stops.length; i++) {
+      const stop = stops[i];
+      if (
+        !stop.name ||
+        !stop.latitude ||
+        !stop.longitude ||
+        stop.sequence_order === undefined ||
+        stop.travel_time_from_previous_stop_min === undefined ||
+        stop.travel_distance_from_previous_stop === undefined ||
+        stop.dwell_time_minutes === undefined
+      ) {
         return res.status(400).json({
           success: false,
-          message: "IMEI must be exactly 15 digits",
-          code: "INVALID_IMEI_FORMAT",
+          message: `Stop ${
+            i + 1
+          }: All fields are mandatory - name, latitude, longitude, sequence_order, travel_time_from_previous_stop_min, travel_distance_from_previous_stop, and dwell_time_minutes are required`,
         });
       }
-      updateData.IMEI = IMEI.trim();
     }
-    if (trip_data !== undefined) updateData.trip_data = trip_data;
 
-    // Prevent duplicate bus_number or IMEI by checking other buses (excluding current one)
-    if (updateData.bus_number || updateData.IMEI) {
-      const duplicateCheck = {};
-      if (updateData.bus_number)
-        duplicateCheck.bus_number = updateData.bus_number;
-      if (updateData.IMEI) duplicateCheck.IMEI = updateData.IMEI;
-
-      const existingBus = await Bus.findOne({
-        where: {
-          id: { [Op.ne]: id },
-          [Op.or]: Object.keys(duplicateCheck).map((key) => ({
-            [key]: duplicateCheck[key],
-          })),
-        },
-      });
-
-      if (existingBus) {
-        const duplicateField =
-          existingBus.bus_number === updateData.bus_number
-            ? "bus_number"
-            : "IMEI";
-        return res.status(409).json({
+    // Validate trips array structure
+    for (let i = 0; i < trips.length; i++) {
+      const trip = trips[i];
+      if (
+        !trip.scheduled_start_time ||
+        !trip.scheduled_end_time ||
+        !trip.trip_type
+      ) {
+        return res.status(400).json({
           success: false,
-          message: `Bus with this ${duplicateField} already exists`,
-          code: "DUPLICATE_BUS",
+          message: `Trip ${
+            i + 1
+          }: scheduled_start_time, scheduled_end_time, and trip_type are required`,
         });
       }
     }
 
-    await bus.update(updateData);
+    // Step1: Create a bus
+    const bus = await Bus.create(
+      {
+        bus_number,
+        imei_number,
+        name: name || null,
+        is_active: true,
+      },
+      { transaction }
+    );
 
-    res.status(200).json({
+    // Step 2: Create route
+    const route = await Route.create(
+      {
+        route_name,
+        total_distance_km,
+      },
+      { transaction }
+    );
+
+    // Step 3: add desired stops with POSTGIS coordinates
+    const createdStops = [];
+    for (const stopData of stops) {
+      const stop = await Stop.create(
+        {
+          name: stopData.name,
+          location: sequelize.fn(
+            "ST_SetSRID",
+            sequelize.fn("ST_MakePoint", stopData.longitude, stopData.latitude),
+            4326
+          ),
+        },
+        { transaction }
+      );
+
+      createdStops.push({
+        ...stop.toJSON(),
+        originalData: stopData,
+      });
+    }
+
+    // Step 4: Create Route Stops
+    for (const stopData of stops) {
+      // find matching stops for this desired route
+      const matchingStop = createdStops.find(
+        (s) => s.originalData.name === stopData.name
+      );
+
+      await RouteStop.create(
+        {
+          route_id: route.id,
+          stop_id: matchingStop.id,
+          sequence_order: stopData.sequence_order,
+          travel_time_from_previous_stop_min:
+            stopData.travel_time_from_previous_stop_min,
+          travel_distance_from_previous_stop:
+            stopData.travel_distance_from_previous_stop,
+          dwell_time_minutes: stopData.dwell_time_minutes,
+        },
+        { transaction }
+      );
+    }
+
+    // Step 5: Add trips to db  (at least one trip required)
+    const createdTrips = [];
+    for (const tripData of trips) {
+      const trip = await Trip.create(
+        {
+          route_id: route.id,
+          bus_id: bus.id,
+          scheduled_start_time: new Date(tripData.scheduled_start_time),
+          scheduled_end_time: new Date(tripData.scheduled_end_time),
+          trip_type: tripData.trip_type,
+          is_active: true,
+        },
+        { transaction }
+      );
+
+      createdTrips.push(trip);
+
+      // Step 6: Create TripStopTimes for each trip if a trip exists
+      for (const stopData of stops) {
+        const matchingStop = createdStops.find(
+          (s) => s.originalData.name === stopData.name
+        );
+
+        // Calculate approximate arrival and departure times based on sequence and travel time
+        let arrivalTime = new Date(tripData.scheduled_start_time);
+        let departureTime = new Date(tripData.scheduled_start_time);
+
+        if (stopData.sequence_order > 1) {
+          // Calculate cumulative travel time for stops after the first one
+          const previousStops = stops.filter(
+            (s) => s.sequence_order < stopData.sequence_order
+          );
+          const cumulativeTravelTime = previousStops.reduce(
+            (total, prevStop) => {
+              return (
+                total +
+                (prevStop.travel_time_from_previous_stop_min || 0) +
+                (prevStop.dwell_time_minutes || 1)
+              );
+            },
+            0
+          );
+
+          arrivalTime = new Date(
+            arrivalTime.getTime() + cumulativeTravelTime * 60000
+          ); // Converting minutes to milliseconds
+        }
+
+        departureTime = new Date(
+          arrivalTime.getTime() + (stopData.dwell_time_minutes || 1) * 60000
+        );
+
+        await TripStopTime.create(
+          {
+            trip_id: trip.id,
+            stop_id: matchingStop.id,
+            approx_arrival_time: arrivalTime,
+            approx_departure_time: departureTime,
+          },
+          { transaction }
+        );
+      }
+    }
+
+    // commit our transaction
+    await transaction.commit();
+
+    // Return success response
+    res.status(201).json({
       success: true,
-      message: "Bus updated successfully",
-      data: { bus },
+      message: "Bus and related data added successfully",
+      data: {
+        bus: bus.toJSON(),
+        route: route.toJSON(),
+        stops: createdStops.map((s) => ({ id: s.id, name: s.name })),
+        trips: createdTrips.map((t) => t.toJSON()),
+        total_stops: createdStops.length,
+        total_trips: createdTrips.length,
+      },
     });
   } catch (error) {
-    console.error("Update bus error:", error);
+    // If something goes wrong, we rollback
+    await transaction.rollback();
 
+    console.error("Error adding bus:", error);
+
+    // Handle specific Sequelize validation errors
     if (error.name === "SequelizeValidationError") {
       return res.status(400).json({
         success: false,
@@ -232,46 +238,25 @@ export const updateBus = async (req, res) => {
           field: err.path,
           message: err.message,
         })),
-        code: "VALIDATION_ERROR",
       });
     }
-
-    res.status(500).json({
-      success: false,
-      message: "Internal server error while updating bus",
-      code: "UPDATE_BUS_ERROR",
-    });
-  }
-};
-
-// Delete a bus by ID
-export const deleteBus = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Check if bus exists before deleting
-    const bus = await Bus.findByPk(id);
-    if (!bus) {
-      return res.status(404).json({
+    // Handle unique constraint violations
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(409).json({
         success: false,
-        message: "Bus not found",
-        code: "BUS_NOT_FOUND",
+        message: "Duplicate entry",
+        field: error.errors[0]?.path,
+        error: error.errors[0]?.message,
       });
     }
 
-    await bus.destroy();
-
-    res.status(200).json({
-      success: true,
-      message: "Bus deleted successfully",
-      code: "BUS_DELETED",
-    });
-  } catch (error) {
-    console.error("Delete bus error:", error);
     res.status(500).json({
       success: false,
-      message: "Internal server error while deleting bus",
-      code: "DELETE_BUS_ERROR",
+      message: "Failed to add bus",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : "Internal server error",
     });
   }
 };
