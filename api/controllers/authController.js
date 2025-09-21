@@ -1,11 +1,10 @@
-import Admin from "../models/Admin.js";
-import {
-  generateToken,
-  isMobileClient,
-} from "../middlewares/authMiddleware.js";
+import User from "../models/User.js";
+import { generateToken, isMobileClient } from "../utils/tokenUtils.js";
 
-export const allowedUserTypes = ["admin"]; // Add new user types when needed
+// Define allowed user roles for the system
+export const allowedUserTypes = ["admin"]; // Add new roles as needed
 
+// Register new user (universal)
 export const register = async (req, res) => {
   try {
     const { email, password, userType } = req.body;
@@ -18,7 +17,7 @@ export const register = async (req, res) => {
       });
     }
 
-    // For now, we allow admins as well, but in future we would retrict userType === admin for register route
+    // Validate user type (role)
     if (!allowedUserTypes.includes(userType)) {
       return res.status(400).json({
         success: false,
@@ -30,7 +29,9 @@ export const register = async (req, res) => {
     }
 
     // Check if user already exists
-    const existingUser = await getUserByType(userType, email);
+    const existingUser = await User.findOne({
+      where: { email: email.toLowerCase(), role: userType },
+    });
     if (existingUser) {
       return res.status(409).json({
         success: false,
@@ -39,22 +40,12 @@ export const register = async (req, res) => {
       });
     }
 
-    let newUser;
-    switch (userType) {
-      case "admin":
-        newUser = await Admin.create({
-          email: email.toLowerCase(),
-          password,
-          role: "admin",
-        });
-        break;
-      default:
-        return res.status(400).json({
-          success: false,
-          message: "Invalid user type for registration",
-          code: "INVALID_USER_TYPE",
-        });
-    }
+    // Create new user with role
+    const newUser = await User.create({
+      email: email.toLowerCase(),
+      password,
+      role: userType,
+    });
 
     res.status(201).json({
       success: true,
@@ -96,6 +87,7 @@ export const register = async (req, res) => {
   }
 };
 
+// Universal login for all user types
 export const login = async (req, res) => {
   try {
     const { email, password, userType } = req.body;
@@ -118,7 +110,10 @@ export const login = async (req, res) => {
       });
     }
 
-    const user = await getUserByType(userType, email);
+    // Find user by role and email
+    const user = await User.findOne({
+      where: { email: email.toLowerCase(), role: userType },
+    });
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -126,6 +121,8 @@ export const login = async (req, res) => {
         code: "USER_NOT_FOUND",
       });
     }
+
+    // Verify password
 
     const isPasswordValid = await user.checkPassword(password);
     if (!isPasswordValid) {
@@ -136,14 +133,16 @@ export const login = async (req, res) => {
       });
     }
 
+    // Generate JWT token
     const token = generateToken(user.id, user.role, userType);
 
+    // Update last login timestamp
     await user.update({ lastLogin: new Date() });
 
     const isMobile = isMobileClient(req);
 
     // Set cookie for web browsers (not for mobile)
-    const cookieName = `${userType}Token`; // eg: adminToken.
+    const cookieName = `${userType}Token`; // eg: adminToken, driverToken, etc.
     if (!isMobile && !req.headers["x-no-cookies"]) {
       res.cookie(cookieName, token, {
         httpOnly: true,
@@ -166,7 +165,7 @@ export const login = async (req, res) => {
       },
     };
 
-    // Including token in response for mobile or when requested
+    // Include token in response for mobile or when requested
     if (isMobile || req.headers["x-include-token"] === "true") {
       responseData.token = token;
       responseData.authMethod = "token";
@@ -185,11 +184,13 @@ export const login = async (req, res) => {
   }
 };
 
+// Logout user and clear authentication
 export const logout = async (req, res) => {
   try {
     const userType = req.user?.userType;
     const cookieName = `${userType}Token`;
 
+    // Clear authentication cookie if exists
     if (req.cookies && req.cookies[cookieName]) {
       res.clearCookie(cookieName, {
         httpOnly: true,
@@ -205,125 +206,13 @@ export const logout = async (req, res) => {
       userType,
     });
 
-    // For mobile apps or browsers,
-    // the token stored in local storage must be cleared
-    // from their side
+    // Note: Mobile apps must clear tokens from local storage on their side
   } catch (error) {
     console.error("Logout error:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error during logout",
       code: "LOGOUT_ERROR",
-    });
-  }
-};
-
-export const getProfile = async (req, res) => {
-  try {
-    const { userType, id } = req.user;
-
-    const user = await getUserByType(userType, null, id);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: `${
-          userType.charAt(0).toUpperCase() + userType.slice(1)
-        } not found`,
-        code: "USER_NOT_FOUND",
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      userType,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        lastLogin: user.lastLogin,
-        createdAt: user.createdAt,
-      },
-    });
-  } catch (error) {
-    console.error("Get profile error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error while fetching profile",
-      code: "PROFILE_ERROR",
-    });
-  }
-};
-
-const getUserByType = async (userType, email = null, id = null) => {
-  const whereClause = {};
-
-  if (email) {
-    whereClause.email = email.toLowerCase();
-  }
-  if (id) {
-    whereClause.id = id;
-  }
-
-  switch (userType) {
-    case "admin":
-      return id
-        ? await Admin.findByPk(id)
-        : await Admin.findOne({ where: whereClause });
-
-    default:
-      return null;
-  }
-};
-
-export const refreshToken = async (req, res) => {
-  try {
-    const { userType, id } = req.user;
-
-    const user = await getUserByType(userType, null, id);
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: `${
-          userType.charAt(0).toUpperCase() + userType.slice(1)
-        } not found or inactive`,
-        code: "INVALID_USER",
-      });
-    }
-
-    const newToken = generateToken(user.id, user.role, userType);
-
-    const isMobile = isMobileClient(req);
-    const cookieName = `${userType}Token`;
-
-    if (!isMobile && !req.headers["x-no-cookies"]) {
-      res.cookie(cookieName, newToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 24 * 60 * 60 * 1000,
-        path: "/",
-      });
-    }
-
-    const responseData = {
-      success: true,
-      message: "Token refreshed successfully",
-      userType,
-    };
-
-    if (isMobile || req.headers["x-include-token"] === "true") {
-      responseData.token = newToken;
-    }
-
-    res.status(200).json(responseData);
-  } catch (error) {
-    console.error("Refresh token error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error during token refresh",
-      code: "REFRESH_ERROR",
     });
   }
 };

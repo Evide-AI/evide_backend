@@ -1,26 +1,11 @@
 import jwt from "jsonwebtoken";
-import Admin from "../models/Admin.js";
+import User from "../models/User.js";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-export const generateToken = (userId, role, userType = "admin") => {
-  return jwt.sign(
-    {
-      userId,
-      role,
-      userType,
-      type: "access",
-    },
-    JWT_SECRET,
-    {
-      expiresIn: process.env.JWT_EXPIRES_IN || "24h",
-      issuer: "evide-backend",
-    }
-  );
-};
-
+// Authentication middleware - checks for valid JWT token
 export const authenticate = (allowedUserTypes) => {
-  // If no user types specified, require explicit definition
+  // Ensure user types are specified for security
   if (!allowedUserTypes || allowedUserTypes.length === 0) {
     throw new Error("authenticate() requires allowedUserTypes to be specified");
   }
@@ -29,14 +14,13 @@ export const authenticate = (allowedUserTypes) => {
     try {
       let token = null;
 
-      // Check 1 for token in headers
+      // Method 1: Check Authorization header (Bearer token)
       const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith("Bearer ")) {
         token = authHeader.substring(7);
       }
 
-      // Check 2 for token in cookies for Web Browsers
-      // Try different cookie names based on allowed user types
+      // Method 2: Check cookies for web browsers
       if (!token && req.cookies) {
         for (const userType of allowedUserTypes) {
           const cookieName = `${userType}Token`;
@@ -47,7 +31,7 @@ export const authenticate = (allowedUserTypes) => {
         }
       }
 
-      // Check 3 in x-access-token header
+      // Method 3: Check custom header
       if (!token && req.headers["x-access-token"]) {
         token = req.headers["x-access-token"];
       }
@@ -60,8 +44,10 @@ export const authenticate = (allowedUserTypes) => {
         });
       }
 
+      // Verify and decode token
       const decoded = jwt.verify(token, JWT_SECRET);
 
+      // Check if user type is allowed for this route
       if (!allowedUserTypes.includes(decoded.userType)) {
         return res.status(401).json({
           success: false,
@@ -72,7 +58,10 @@ export const authenticate = (allowedUserTypes) => {
         });
       }
 
-      const user = await getUserByType(decoded.userType, decoded.userId);
+      // Verify user still exists in database
+      const user = await User.findOne({
+        where: { id: decoded.userId, role: decoded.userType },
+      });
       if (!user) {
         return res.status(401).json({
           success: false,
@@ -81,6 +70,7 @@ export const authenticate = (allowedUserTypes) => {
         });
       }
 
+      // Attach user data to request object
       req.user = {
         id: user.id,
         email: user.email,
@@ -88,6 +78,7 @@ export const authenticate = (allowedUserTypes) => {
         userType: decoded.userType,
       };
 
+      // Legacy support - also attach to req.admin for admin users
       if (decoded.userType === "admin") {
         req.admin = req.user;
       }
@@ -119,33 +110,4 @@ export const authenticate = (allowedUserTypes) => {
       });
     }
   };
-};
-
-const getUserByType = async (userType, userId) => {
-  switch (userType) {
-    case "admin":
-      return await Admin.findByPk(userId);
-
-    default:
-      return null;
-  }
-};
-
-export const isMobileClient = (req) => {
-  const userAgent = req.headers["user-agent"] || "";
-  const mobileIndicators = [
-    "Mobile",
-    "Android",
-    "iPhone",
-    "iPad",
-    "BlackBerry",
-    "Windows Phone",
-    "Opera Mini",
-    "IEMobile",
-  ];
-
-  return (
-    mobileIndicators.some((indicator) => userAgent.includes(indicator)) ||
-    req.headers["x-mobile-client"] === "true"
-  );
 };

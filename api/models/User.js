@@ -2,8 +2,8 @@ import { DataTypes } from "sequelize";
 import { sequelize } from "../../config/db.js";
 import bcrypt from "bcrypt";
 
-const Admin = sequelize.define(
-  "Admin",
+const User = sequelize.define(
+  "user",
   {
     id: {
       type: DataTypes.INTEGER,
@@ -28,7 +28,7 @@ const Admin = sequelize.define(
     role: {
       type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: "admin",
+      defaultValue: "user", // can be 'admin', 'driver', 'passenger', etc.
     },
     lastLogin: {
       type: DataTypes.DATE,
@@ -36,30 +36,29 @@ const Admin = sequelize.define(
     },
   },
   {
-    tableName: "admins",
+    tableName: "users",
     timestamps: true,
     hooks: {
-      beforeCreate: async (admin) => {
-        admin.password = await bcrypt.hash(admin.password, 12);
+      beforeCreate: async (user) => {
+        user.password = await bcrypt.hash(user.password, 12);
       },
-      beforeUpdate: async (admin) => {
-        if (admin.changed("password")) {
-          admin.password = await bcrypt.hash(admin.password, 12);
+      beforeUpdate: async (user) => {
+        if (user.changed("password")) {
+          user.password = await bcrypt.hash(user.password, 12);
         }
       },
     },
   }
 );
 
-Admin.prototype.checkPassword = async function (password) {
+User.prototype.checkPassword = async function (password) {
   return await bcrypt.compare(password, this.password);
 };
 
-// fn to hide password from JSON responses sent to client
-Admin.prototype.toJSON = function () {
+User.prototype.toJSON = function () {
   const values = Object.assign({}, this.get());
   delete values.password;
   return values;
 };
 
-export default Admin;
+export default User;

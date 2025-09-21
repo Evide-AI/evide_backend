@@ -2,50 +2,31 @@ import { DataTypes } from "sequelize";
 import { sequelize } from "../../config/db.js";
 
 const Bus = sequelize.define(
-  "Bus",
+  "bus",
   {
-    id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true,
-    },
-    bus_name: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      validate: {
-        len: [2, 100],
-      },
-    },
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     bus_number: {
       type: DataTypes.STRING,
       allowNull: false,
       unique: true,
-      validate: {
-        len: [4, 20],
-      },
+      validate: { len: [4, 20] },
     },
-    IMEI: {
-      type: DataTypes.STRING,
+    imei_number: {
+      type: DataTypes.STRING(15),
       allowNull: false,
       unique: true,
-      validate: {
-        len: [15, 15], // IMEI is 15 digits
-        isNumeric: true,
-      },
+      validate: { isNumeric: true },
     },
+    name: { type: DataTypes.STRING, validate: { len: [2, 100] } },
+    is_active: { type: DataTypes.BOOLEAN, defaultValue: true },
   },
   {
     tableName: "buses",
     timestamps: true,
     indexes: [
-      {
-        unique: true,
-        fields: ["bus_number"],
-      },
-      {
-        unique: true,
-        fields: ["IMEI"],
-      },
+      { unique: true, fields: ["bus_number"] },
+      { unique: true, fields: ["imei_number"] },
+      { fields: ["is_active"] },
     ],
   }
 );
