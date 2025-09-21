@@ -1,0 +1,345 @@
+import getCrc16 from "./crc16.js"
+
+const MIN_PACKET_LEN = 10
+
+class Gt06 {
+  constructor() {
+    this.msgBufferRaw = Buffer.alloc(0)
+    this.msgBuffer = []
+    this.imei = null
+  }
+
+  // if multiple message are in the buffer, it will store them in msgBuffer
+  // the state of the last message will be represented in Gt06
+  parse(data) {
+    // new data is concatenated with any leftover already in buffer
+    // TCP is stream-based so an entire packet may not arrive at once
+    this.msgBufferRaw = Buffer.concat([this.msgBufferRaw, data])
+
+    while (this.msgBufferRaw.length >= MIN_PACKET_LEN) {
+      const parsed = { expectsResponse: false }
+      if (this.msgBufferRaw.readUInt16BE(0) !== 0x7878) {
+        this.msgBufferRaw = this.msgBufferRaw.slice(1)
+        continue
+      }
+
+      const length = this.msgBufferRaw.readUInt8(2)
+      const totalLen = length + MIN_PACKET_LEN
+
+      if (this.msgBufferRaw.length < totalLen) {
+        break
+      }
+
+      const msg = this.msgBufferRaw.slice(0, totalLen)
+
+      if (!validateCrc(msg)) {
+        console.warn("CRC mismatch, skipping packet", msg.toString("hex"))
+        this.msgBufferRaw = this.msgBufferRaw.slice(totalLen)
+        continue
+      }
+
+      switch (selectEvent(msg).number) {
+        case 0x01: // login message
+          const loginData = parseLogin(msg)
+          if (!loginData) {
+            console.warn("Invalid login message received.")
+            break
+          }
+          Object.assign(parsed, loginData)
+          parsed.imei = parsed.imei
+          parsed.expectsResponse = true
+          parsed.responseMsg = createResponse(msg)
+          break
+        case 0x12: // location message
+          Object.assign(parsed, parseLocation(msg), { imei: this.imei })
+          break
+        case 0x13: // status message
+          Object.assign(parsed, parseStatus(msg), { imei: this.imei })
+          parsed.expectsResponse = true
+          parsed.responseMsg = createResponse(msg)
+          break
+        case 0x16: // alarm message
+          Object.assign(parsed, parseAlarm(msg), { imei: this.imei })
+          break
+        default:
+          console.warn("unknown message type, skipping", selectEvent(msg))
+          break
+      }
+      parsed.event = selectEvent(msg)
+      parsed.parseTime = Date.now()
+      Object.assign(this, parsed)
+      this.msgBuffer.push(parsed)
+      this.msgBufferRaw = this.msgBufferRaw.slice(totalLen)
+    }
+  }
+
+  clearMsgBuffer() {
+    this.msgBuffer.length = 0
+  }
+}
+
+export default Gt06
+
+function selectEvent(data) {
+  let eventStr = "unknown"
+
+  switch (data[3]) {
+    case 0x01:
+      eventStr = "login"
+      break
+    case 0x12:
+      eventStr = "location"
+      break
+    case 0x13:
+      eventStr = "status"
+      break
+    case 0x16:
+      eventStr = "alarm"
+      break
+    default:
+      eventStr = "unknown"
+      break
+  }
+
+  return { number: data[3], string: eventStr }
+}
+
+function parseLogin(data) {
+  if (data[2] !== 1 + 8 + 2) {
+    // proto + imei + serial
+    return null
+  }
+  return {
+    imei: BigInt("0x" + data.slice(4, 12).toString("hex")).toString(),
+    serialNumber: data.readUInt16BE(12),
+  }
+}
+
+function parseStatus(data) {
+  const statusInfo = data.slice(4, 9)
+  const terminalInfo = statusInfo.slice(0, 1).readUInt8(0)
+  const voltageLevel = statusInfo.slice(1, 2).readUInt8(0)
+  const gsmSigStrength = statusInfo.slice(2, 3).readUInt8(0)
+
+  const alarm = (terminalInfo & 0x38) >> 3
+  let alarmType = "normal"
+  switch (alarm) {
+    case 1:
+      alarmType = "shock"
+      break
+    case 2:
+      alarmType = "power cut"
+      break
+    case 3:
+      alarmType = "low battery"
+      break
+    case 4:
+      alarmType = "sos"
+      break
+    default:
+      alarmType = "normal"
+      break
+  }
+
+  const termObj = {
+    status: Boolean(terminalInfo & 0x01),
+    ignition: Boolean(terminalInfo & 0x02),
+    charging: Boolean(terminalInfo & 0x04),
+    alarmType: alarmType,
+    gpsTracking: Boolean(terminalInfo & 0x40),
+    relayState: Boolean(terminalInfo & 0x80),
+  }
+
+  let voltageLevelStr = "no power (shutting down)"
+  switch (voltageLevel) {
+    case 1:
+      voltageLevelStr = "extremely low battery"
+      break
+    case 2:
+      voltageLevelStr = "very low battery (low battery alarm)"
+      break
+    case 3:
+      voltageLevelStr = "low battery (can be used normally)"
+      break
+    case 4:
+      voltageLevelStr = "medium"
+      break
+    case 5:
+      voltageLevelStr = "high"
+      break
+    case 6:
+      voltageLevelStr = "very high"
+      break
+    default:
+      voltageLevelStr = "no power (shutting down)"
+      break
+  }
+
+  let gsmSigStrengthStr = "no signal" // how shall it send without signal :-D
+  switch (gsmSigStrength) {
+    case 1:
+      gsmSigStrengthStr = "extremely weak signal"
+      break
+    case 2:
+      gsmSigStrengthStr = "very weak signal"
+      break
+    case 3:
+      gsmSigStrengthStr = "good signal"
+      break
+    case 4:
+      gsmSigStrengthStr = "strong signal"
+      break
+    default:
+      gsmSigStrengthStr = "no signal"
+      break
+  }
+
+  return {
+    terminalInfo: termObj,
+    voltageLevel: voltageLevelStr,
+    gsmSigStrength: gsmSigStrengthStr,
+  }
+}
+
+function parseLocation(data) {
+  const datasheet = {
+    startBit: data.readUInt16BE(0),
+    protocolLength: data.readUInt8(2),
+    protocolNumber: data.readUInt8(3),
+    fixTime: data.slice(4, 10),
+    quantity: data.readUInt8(10),
+    lat: data.readUInt32BE(11),
+    lon: data.readUInt32BE(15),
+    speed: data.readUInt8(19),
+    course: data.readUInt16BE(20),
+    mcc: data.readUInt16BE(22),
+    mnc: data.readUInt8(24),
+    lac: data.readUInt16BE(25),
+    cellId: parseInt(data.slice(27, 30).toString("hex"), 16),
+    serialNr: data.readUInt16BE(30),
+    errorCheck: data.readUInt16BE(32),
+  }
+
+  const parsed = {
+    fixTime: parseDatetime(datasheet.fixTime).toISOString(),
+    fixTimestamp: parseDatetime(datasheet.fixTime).getTime() / 1000,
+    satCnt: (datasheet.quantity & 0xf0) >> 4, // lower 4 bits = total satellites
+    satCntActive: datasheet.quantity & 0x0f, // upper 4 bits = no. of satellites used
+    lat: decodeGt06Lat(datasheet.lat, datasheet.course),
+    lon: decodeGt06Lon(datasheet.lon, datasheet.course),
+    speed: datasheet.speed,
+    speedUnit: "km/h",
+    realTimeGps: Boolean(datasheet.course & 0x2000),
+    gpsPositioned: Boolean(datasheet.course & 0x1000),
+    eastLongitude: !Boolean(datasheet.course & 0x0800),
+    northLatitude: Boolean(datasheet.course & 0x0400),
+    course: datasheet.course & 0x3ff,
+    mcc: datasheet.mcc,
+    mnc: datasheet.mnc,
+    lac: datasheet.lac,
+    cellId: datasheet.cellId,
+    serialNr: datasheet.serialNr,
+    errorCheck: datasheet.errorCheck,
+  }
+  return parsed
+}
+
+function parseAlarm(data) {
+  const datasheet = {
+    startBit: data.readUInt16BE(0),
+    protocolLength: data.readUInt8(2),
+    protocolNumber: data.readUInt8(3),
+    fixTime: data.slice(4, 10),
+    quantity: data.readUInt8(10),
+    lat: data.readUInt32BE(11),
+    lon: data.readUInt32BE(15),
+    speed: data.readUInt8(19),
+    course: data.readUInt16BE(20),
+    mcc: data.readUInt16BE(22),
+    mnc: data.readUInt8(24),
+    lac: data.readUInt16BE(25),
+    cellId: parseInt(data.slice(27, 30).toString("hex"), 16),
+    terminalInfo: data.readUInt8(31),
+    voltageLevel: data.readUInt8(32),
+    gpsSignal: data.readUInt8(33),
+    alarmLang: data.readUInt16BE(34),
+    serialNr: data.readUInt16BE(36),
+    errorCheck: data.readUInt16BE(38),
+  }
+
+  const parsed = {
+    fixTime: parseDatetime(datasheet.fixTime).toISOString(),
+    fixTimestamp: parseDatetime(datasheet.fixTime).getTime() / 1000,
+    satCnt: (datasheet.quantity & 0xf0) >> 4,
+    satCntActive: datasheet.quantity & 0x0f,
+    lat: decodeGt06Lat(datasheet.lat, datasheet.course),
+    lon: decodeGt06Lon(datasheet.lon, datasheet.course),
+    speed: datasheet.speed,
+    speedUnit: "km/h",
+    realTimeGps: Boolean(datasheet.course & 0x2000),
+    gpsPositioned: Boolean(datasheet.course & 0x1000),
+    eastLongitude: !Boolean(datasheet.course & 0x0800),
+    northLatitude: Boolean(datasheet.course & 0x0400),
+    course: datasheet.course & 0x3ff,
+    mnc: datasheet.mnc,
+    cellId: datasheet.cellId,
+    terminalInfo: datasheet.terminalInfo,
+    voltageLevel: datasheet.voltageLevel,
+    gpsSignal: datasheet.gpsSignal,
+    alarmLang: datasheet.alarmLang,
+    serialNr: datasheet.serialNr,
+    errorCheck: datasheet.errorCheck,
+  }
+  return parsed
+}
+
+function createResponse(data) {
+  const respRaw = Buffer.from("787805FF0001d9dc0d0a", "hex")
+  // we put the protocol of the received message into the response message
+  // at position byte 3 (0xFF in the raw message)
+  respRaw[3] = data[3]
+  appendCrc16(respRaw)
+  return respRaw
+}
+
+function parseDatetime(data) {
+  // GT06 datetime YY MM DD hh mm ss
+  // year will be like 0x0B = 11 so add 2000 -> 2011
+  // JS months are 0-11 so subtract 1
+  return new Date(
+    Date.UTC(data[0] + 2000, data[1] - 1, data[2], data[3], data[4], data[5]),
+  )
+}
+
+function decodeGt06Lat(lat, course) {
+  let latitude = lat / 60.0 / 30000.0
+  if (!(course & 0x0400)) {
+    latitude = -latitude
+  }
+  return Math.round(latitude * 1000000) / 1000000
+}
+
+function decodeGt06Lon(lon, course) {
+  let longitude = lon / 60.0 / 30000.0
+  if (course & 0x0800) {
+    longitude = -longitude
+  }
+
+  return Math.round(longitude * 1000000) / 1000000
+}
+
+function appendCrc16(data) {
+  // write the crc16 at the 4th position from the right (2 bytes)
+  // the last two bytes are the line ending
+  // crc is calculated from Length to Serial Number so 2 to 6
+  data.writeUInt16BE(
+    getCrc16(data.slice(2, 6)).readUInt16BE(0),
+    data.length - 4,
+  )
+}
+
+function validateCrc(msg) {
+  const msgCrc = msg.readUInt16BE(msg.length - 4)
+  const calcCrc = getCrc16(msg.slice(2, msg.length - 4)).readUInt16BE(0)
+  return msgCrc === calcCrc
+}
