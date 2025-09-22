@@ -45,7 +45,7 @@ const RouteStop = sequelize.define(
       },
     },
     travel_distance_from_previous_stop: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
       defaultValue: 0,
       validate: {

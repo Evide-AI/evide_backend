@@ -5,6 +5,8 @@ import { sequelize } from "../config/db.js";
 
 import authRoutes from "./routes/authRoutes.js";
 import busRoutes from "./routes/busRoutes.js";
+import routeRoutes from "./routes/routeRoutes.js";
+import { notFound, errorHandler } from "./middlewares/errorMiddleware.js";
 
 const app = express();
 
@@ -54,19 +56,16 @@ app.get("/api", (req, res) => {
       database: "/health/db",
       auth: "/api/auth",
       buses: "/api/buses",
+      routes: "/api/routes",
     },
   });
 });
 
 app.use("/api/auth", authRoutes);
 app.use("/api/buses", busRoutes);
+app.use("/api/routes", routeRoutes);
 
-app.use((req, res) => {
-  res.status(404).json({
-    error: "Route not found",
-    message: "The requested endpoint does not exist",
-    path: req.originalUrl,
-  });
-});
+app.use(notFound);
+app.use(errorHandler);
 
 export default app;

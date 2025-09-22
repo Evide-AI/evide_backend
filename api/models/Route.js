@@ -11,7 +11,7 @@ const Route = sequelize.define(
     },
     route_name: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       validate: {
         len: [2, 100],
       },
