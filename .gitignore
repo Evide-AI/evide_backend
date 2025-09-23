@@ -8,3 +8,8 @@ node_modules/
 # Logs
 *.logs
 logs/
+
+# Other
+.github
+.vscode
+scripts

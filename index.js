@@ -2,7 +2,7 @@ import "dotenv/config";
 import { connectDB } from "./config/db.js";
 import app from "./api/app.js";
 
-const API_PORT = process.env.API_PORT || 3000;
+const API_PORT = process.env.API_PORT || 8000;
 
 async function startServer() {
   try {

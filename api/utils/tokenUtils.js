@@ -1,4 +1,5 @@
-import User from "../models/User";
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
 
 // Generate JWT token with user information
 export const generateToken = (userId, role, userType) => {
@@ -9,7 +10,7 @@ export const generateToken = (userId, role, userType) => {
       userType,
       type: "access",
     },
-    JWT_SECRET,
+    process.env.JWT_SECRET,
     {
       expiresIn: process.env.JWT_EXPIRES_IN,
       issuer: "evide-backend",
