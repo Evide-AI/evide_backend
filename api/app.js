@@ -6,6 +6,7 @@ import { sequelize } from "../config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import busRoutes from "./routes/busRoutes.js";
 import routeRoutes from "./routes/routeRoutes.js";
+import tripRoutes from "./routes/tripRoutes.js"
 import { notFound, errorHandler } from "./middlewares/errorMiddleware.js";
 
 const app = express();
@@ -64,6 +65,7 @@ app.get("/api", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/buses", busRoutes);
 app.use("/api/routes", routeRoutes);
+app.use("/api/trips", tripRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
