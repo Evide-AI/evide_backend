@@ -13,7 +13,7 @@ export const createBus = asyncHandler(async (req, res) => {
   if (!bus_number || !imei_number) {
     throw new AppError(
       "All fields are mandatory: bus_number & imei_number are required",
-      400
+      400,
     );
   }
 
@@ -75,6 +75,67 @@ export const createBus = asyncHandler(async (req, res) => {
         createdAt: bus.createdAt,
         updatedAt: bus.updatedAt,
       },
+    },
+  });
+});
+
+/**
+ * @desc Get all buses with pagination, filtering, and sorting
+ * @route GET /api/buses
+ */
+export const getBuses = asyncHandler(async (req, res) => {
+  let { limit, page, is_active, orderby, order, all } = req.query;
+
+  if (all === "true") {
+    const buses = await Bus.findAll({ order: [["createdAt", "DESC"]] });
+
+    return res.status(200).json({
+      success: true,
+      message: "Buses retrieved successfully",
+      pagination: {
+        total: buses.length,
+        page: 1,
+        limit: buses.length,
+        totalPages: 1,
+      },
+      data: { buses },
+    });
+  }
+
+  // Default to paged and filtered
+  // Defaut values: 1st page, 50 rows, ordered by created at descending (newest first)
+  limit = limit ? parseInt(limit) : 50;
+  page = page ? parseInt(page) : 1;
+  orderby = orderby?.toLowerCase() === "updatedat" ? "updatedAt" : "createdAt";
+  order = order?.toLowerCase() === "asc" ? "ASC" : "DESC";
+
+  const offset = (page - 1) * limit;
+
+  // return only active or inactive buses if specified
+  // return all by default
+  const where = {};
+  if (is_active != undefined) {
+    where.is_active = is_active === "true";
+  }
+
+  const { count, rows } = await Bus.findAndCountAll({
+    where,
+    limit,
+    offset,
+    order: [[orderby, order]],
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "Buses retrieved successfully",
+    pagination: {
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil(count / limit),
+    },
+    data: {
+      buses: rows,
     },
   });
 });
