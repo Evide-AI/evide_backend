@@ -1,5 +1,5 @@
 import express from "express";
-import { createBus } from "../controllers/busController.js";
+import { createBus, getBuses } from "../controllers/busController.js";
 import { authenticate } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -12,5 +12,7 @@ const router = express.Router();
 router.use(authenticate(["admin"]));
 
 router.post("/", createBus);
+
+router.get("/", getBuses);
 
 export default router;

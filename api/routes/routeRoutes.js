@@ -1,5 +1,5 @@
 import express from "express";
-import { processStopsAndRoute } from "../controllers/routeController.js";
+import { processStopsAndRoute, getRouteDetails } from "../controllers/routeController.js";
 import { authenticate } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -45,5 +45,14 @@ router.use(authenticate(["admin"]));
  * @returns {Object} Route data with stops and processing details
  */
 router.post("/process-stops", processStopsAndRoute);
+
+/**
+ * @route GET /api/routes/:id
+ * @desc Get route details by ID
+ * @param {String} id - Route ID
+ * @access Private (Admin)
+ * @returns {Object} Route data with stops
+ */
+router.get("/:id", getRouteDetails);
 
 export default router;

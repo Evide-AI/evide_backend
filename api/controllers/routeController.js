@@ -1,4 +1,6 @@
 import Stop from "../models/Stop.js";
+import Route from "../models/Route.js";
+import RouteStop from "../models/RouteStop.js";
 import { Op } from "sequelize";
 import { sequelize } from "../../config/db.js";
 import { AppError, asyncHandler } from "../middlewares/errorMiddleware.js";
@@ -26,7 +28,7 @@ export const processStopsAndRoute = asyncHandler(async (req, res) => {
     if (!stop.name || !stop.latitude || !stop.longitude) {
       throw new AppError(
         `Stop ${i + 1}: name, latitude, and longitude are required`,
-        400
+        400,
       );
     }
 
@@ -37,14 +39,14 @@ export const processStopsAndRoute = asyncHandler(async (req, res) => {
     if (isNaN(lat) || lat < -90 || lat > 90) {
       throw new AppError(
         `Stop ${i + 1}: latitude must be between -90 and 90`,
-        400
+        400,
       );
     }
 
     if (isNaN(lng) || lng < -180 || lng > 180) {
       throw new AppError(
         `Stop ${i + 1}: longitude must be between -180 and 180`,
-        400
+        400,
       );
     }
 
@@ -56,21 +58,21 @@ export const processStopsAndRoute = asyncHandler(async (req, res) => {
           `Stop ${
             i + 1
           }: travel_time_from_previous_stop_min must be a non-negative number`,
-          400
+          400,
         );
       }
     }
 
     if (stop.travel_distance_from_previous_stop !== undefined) {
       const travelDistance = parseFloat(
-        stop.travel_distance_from_previous_stop
+        stop.travel_distance_from_previous_stop,
       );
       if (isNaN(travelDistance) || travelDistance < 0) {
         throw new AppError(
           `Stop ${
             i + 1
           }: travel_distance_from_previous_stop must be a non-negative number`,
-          400
+          400,
         );
       }
     }
@@ -93,7 +95,7 @@ export const processStopsAndRoute = asyncHandler(async (req, res) => {
             name: { [Op.iLike]: stopData.name.trim() },
           },
         },
-        { transaction }
+        { transaction },
       );
 
       if (existingStop) {
@@ -122,12 +124,12 @@ export const processStopsAndRoute = asyncHandler(async (req, res) => {
               sequelize.fn(
                 "ST_MakePoint",
                 stopData.longitude,
-                stopData.latitude
+                stopData.latitude,
               ),
-              4326
+              4326,
             ),
           },
-          { transaction }
+          { transaction },
         );
 
         // Store the stop with its travel data
@@ -189,10 +191,10 @@ export const processStopsAndRoute = asyncHandler(async (req, res) => {
           stopProcessingResults,
           totalStops: processedStops.length,
           newStopsCreated: stopProcessingResults.filter(
-            (s) => s.status === "created"
+            (s) => s.status === "created",
           ).length,
           existingStopsUsed: stopProcessingResults.filter(
-            (s) => s.status === "existing"
+            (s) => s.status === "existing",
           ).length,
           routeStatus:
             routeData.matchType === "new"
@@ -205,4 +207,40 @@ export const processStopsAndRoute = asyncHandler(async (req, res) => {
     await transaction.rollback();
     throw error;
   }
+});
+
+
+/**
+ * @desc Get route details by ID
+ * @route GET /api/routes/:id
+ * @access Private (Admin)
+ */
+export const getRouteDetails = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const route = await Route.findByPk(id, {
+    include: [
+      {
+        model: RouteStop,
+        include: [
+          {
+            model: Stop
+          }
+        ]
+      }
+    ],
+    order: [[RouteStop, "sequence_order", "ASC"]],
+  });
+  
+  if (!route) {
+    return res.status(401).json({
+      success: false,
+      message: "Route not found",
+    });
+  }
+  res.status(200).json({
+    success: true,
+    message: "Route found",
+    data: route,
+  });
 });
