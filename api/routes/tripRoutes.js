@@ -1,5 +1,5 @@
 import express from "express";
-import { createTripWithStops } from "../controllers/tripController.js";
+import { createTripWithStops, getTripDetails } from "../controllers/tripController.js";
 import { authenticate } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -44,5 +44,13 @@ router.use(authenticate(["admin"]));
  * @returns {Object} Trip data with stop times
  */
 router.post("/create", createTripWithStops);
+
+/**
+ * @route GET /api/trips
+ * @desc get trip info
+ * @access private (Admin)
+ * @returns {Object} Trip data or Trip data of specific route
+ */
+router.get("/", getTripDetails);
 
 export default router;

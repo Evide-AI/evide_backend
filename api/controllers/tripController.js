@@ -2,6 +2,7 @@ import { sequelize } from "../../config/db.js";
 import { AppError, asyncHandler } from "../middlewares/errorMiddleware.js";
 import Trip from "../models/Trip.js";
 import TripStopTime from "../models/TripStopTime.js";
+import Stop from "../models/Stop.js";
 
 /**
  * @desc Create a trip with stop times
@@ -97,4 +98,78 @@ export const createTripWithStops = asyncHandler(async (req, res) => {
     await transaction.rollback();
     throw error;
   }
+});
+
+/**
+ * @route GET /api/trips
+ * @desc Get trip info either all or of a specific route, with or without filters and pagination
+ * @access Private (Admin)
+ * @example /api/trips?route_id=id&all=true
+ */
+export const getTripDetails = asyncHandler(async (req, res) => {
+  let { limit, page, route_id, is_active, orderby, order, all } = req.query;
+
+  const where = {};
+  if (route_id) {
+    where.route_id = route_id;
+  }
+  if (is_active !== undefined) {
+    where.is_active = is_active === "true";
+  }
+
+  orderby = orderby || "scheduled_start_time";
+  order = order?.toLowerCase() === "desc" ? "DESC" : "ASC";
+
+  const queryOptions = {
+    where,
+    include: [
+      {
+        model: TripStopTime,
+        include: [{ model: Stop }],
+      },
+    ],
+    order: [[orderby, order]],
+  };
+
+  if (all === "true") {
+    const trips = await Trip.findAll(queryOptions);
+
+    return res.status(200).json({
+      success: true,
+      message: "All trips retrieved successfully",
+      pagination: {
+        total: trips.length,
+        page: 1,
+        limit: trips.length,
+        totalPages: 1,
+      },
+      data: {
+        trips: trips,
+      },
+    });
+  }
+
+  limit = limit ? parseInt(limit) : 50;
+  page = page ? parseInt(page) : 1;
+  const offset = (page - 1) * limit;
+
+  const { count, rows } = await Trip.findAndCountAll({
+    ...queryOptions,
+    limit,
+    offset,
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "Trips retrieved successfully",
+    pagination: {
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil(count / limit),
+    },
+    data: {
+      trips: rows,
+    },
+  });
 });

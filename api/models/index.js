@@ -13,14 +13,24 @@ import User from "./User.js";
  * like the get operation with route_id which includes route_stops and stops
  */
 
-// Establishes a one-to-many relationship between Route and RouteStop.
-// This is necessary to link a route to its sequence of stops.
+// A route has many RouteStops
 Route.hasMany(RouteStop, { foreignKey: "route_id" });
 RouteStop.belongsTo(Route, { foreignKey: "route_id" });
 
-// Establishes a one-to-many relationship between Stop and RouteStop.
-// This allows a stop to be part of multiple routes and defines its role within each route.
+// A stop has many RouteStops
 Stop.hasMany(RouteStop, { foreignKey: "stop_id" });
 RouteStop.belongsTo(Stop, { foreignKey: "stop_id" });
+
+// A Route has many Trips
+Route.hasMany(Trip, { foreignKey: 'route_id' })
+Trip.belongsTo(Route, { foreignKey: 'route_id' })
+
+// A Trip has many TripStopTimes
+Trip.hasMany(TripStopTime, { foreignKey: 'trip_id' })
+TripStopTime.belongsTo(Trip, { foreignKey: 'trip_id' })
+
+// A Stop is associated with many TripStopTimes
+Stop.hasMany(TripStopTime, { foreignKey: 'stop_id' })
+TripStopTime.belongsTo(Stop, { foreignKey: 'stop_id' })
 
 export { Bus, Route, RouteStop, Stop, Trip, TripStopTime, User };
