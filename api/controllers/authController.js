@@ -17,7 +17,7 @@ export const register = asyncHandler(async (req, res) => {
   if (!allowedUserTypes.includes(userType)) {
     throw new AppError(
       `Invalid user type. Allowed types: ${allowedUserTypes.join(", ")}`,
-      400
+      400,
     );
   }
 
@@ -63,7 +63,7 @@ export const login = asyncHandler(async (req, res) => {
   if (!allowedUserTypes.includes(userType)) {
     throw new AppError(
       `Invalid user type. Allowed types: ${allowedUserTypes.join(", ")}`,
-      400
+      400,
     );
   }
 

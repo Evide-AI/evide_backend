@@ -25,6 +25,7 @@ services:
     restart: unless-stopped
     networks:
       - evide-network
+    command: sh -c "npm run migrate && npm run dev"
 
   postgres:
     image: postgis/postgis:17-3.4

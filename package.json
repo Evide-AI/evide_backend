@@ -9,6 +9,8 @@
     "dev": "nodemon index.js",
     "docker:up": "docker-compose up --build",
     "docker:down": "docker-compose down",
+    "migrate": "npx sequelize-cli db:migrate --config config/database.js --migrations-path migrations",
+    "migrate:undo": "npx sequelize-cli db:migrate:undo --config config/database.js --migrations-path migrations",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -25,6 +27,7 @@
     "sequelize": "^6.37.7"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "sequelize-cli": "^6.6.3"
   }
 }
