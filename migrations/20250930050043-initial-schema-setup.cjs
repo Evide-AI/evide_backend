@@ -1,5 +1,5 @@
 /** @type {import('sequelize-cli').Migration} */
-const migration = {
+module.exports = {
   async up(queryInterface, Sequelize) {
     // Enable PostGIS extension for geography support
     await queryInterface.sequelize.query(
@@ -261,5 +261,3 @@ const migration = {
     await queryInterface.dropTable("users");
   },
 };
-
-export default migration;
