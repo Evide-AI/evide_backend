@@ -4,6 +4,7 @@ import Trip from "../models/Trip.js";
 import TripStopTime from "../models/TripStopTime.js";
 import Stop from "../models/Stop.js";
 import Route from "../models/Route.js";
+import RouteStop from "../models/RouteStop.js";
 import Bus from "../models/Bus.js";
 import { scheduleTripJobs } from "../../scheduler/queue.js";
 
@@ -165,12 +166,57 @@ export const getTripDetails = asyncHandler(async (req, res) => {
   orderby = orderby || "scheduled_start_time";
   order = order?.toLowerCase() === "desc" ? "DESC" : "ASC";
 
+  // Function to transform trip data
+  const transformTrip = (trip) => {
+    const tripData = trip.toJSON();
+    const routeStops = tripData.route?.route_stops || [];
+
+    // Generate route name as "FirstStop -> LastStop"
+    let routeName = "Unknown Route";
+    if (routeStops.length > 0) {
+      const firstStop = routeStops[0]?.stop?.name || "Unknown";
+      const lastStop =
+        routeStops[routeStops.length - 1]?.stop?.name || "Unknown";
+      routeName = `${firstStop} -> ${lastStop}`;
+    }
+
+    return {
+      ...tripData,
+      bus_number: tripData.bus?.bus_number || null,
+      route_name: routeName,
+    };
+  };
+
   const queryOptions = {
     where,
     include: [
       {
         model: TripStopTime,
+        as: "trip_stop_times",
         include: [{ model: Stop }],
+      },
+      {
+        model: Bus,
+        attributes: ["id", "bus_number", "name"],
+      },
+      {
+        model: Route,
+        attributes: ["id"],
+        include: [
+          {
+            model: RouteStop,
+            as: "route_stops",
+            attributes: ["sequence_order"],
+            include: [
+              {
+                model: Stop,
+                attributes: ["id", "name"],
+              },
+            ],
+            separate: true,
+            order: [["sequence_order", "ASC"]],
+          },
+        ],
       },
     ],
     order: [[orderby, order]],
@@ -178,18 +224,19 @@ export const getTripDetails = asyncHandler(async (req, res) => {
 
   if (all === "true") {
     const trips = await Trip.findAll(queryOptions);
+    const transformedTrips = trips.map(transformTrip);
 
     return res.status(200).json({
       success: true,
       message: "All trips retrieved successfully",
       pagination: {
-        total: trips.length,
+        total: transformedTrips.length,
         page: 1,
-        limit: trips.length,
+        limit: transformedTrips.length,
         totalPages: 1,
       },
       data: {
-        trips: trips,
+        trips: transformedTrips,
       },
     });
   }
@@ -204,6 +251,8 @@ export const getTripDetails = asyncHandler(async (req, res) => {
     offset,
   });
 
+  const transformedTrips = rows.map(transformTrip);
+
   res.status(200).json({
     success: true,
     message: "Trips retrieved successfully",
@@ -214,7 +263,7 @@ export const getTripDetails = asyncHandler(async (req, res) => {
       totalPages: Math.ceil(count / limit),
     },
     data: {
-      trips: rows,
+      trips: transformedTrips,
     },
   });
 });

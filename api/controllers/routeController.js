@@ -331,6 +331,7 @@ export const getRouteDetails = asyncHandler(async (req, res) => {
     include: [
       {
         model: RouteStop,
+        as: "route_stops",
         include: [
           {
             model: Stop,
@@ -338,7 +339,7 @@ export const getRouteDetails = asyncHandler(async (req, res) => {
         ],
       },
     ],
-    order: [[RouteStop, "sequence_order", "ASC"]],
+    order: [["route_stops", "sequence_order", "ASC"]],
   });
 
   if (!route) {
