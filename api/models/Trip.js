@@ -30,11 +30,11 @@ const Trip = sequelize.define(
       onDelete: "CASCADE",
     },
     scheduled_start_time: {
-      type: DataTypes.DATE,
+      type: DataTypes.TIME,
       allowNull: false,
     },
     scheduled_end_time: {
-      type: DataTypes.DATE,
+      type: DataTypes.TIME,
       allowNull: false,
     },
     is_active: {

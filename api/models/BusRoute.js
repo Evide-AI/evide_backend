@@ -1,62 +1,56 @@
 import { DataTypes } from "sequelize";
 import { sequelize } from "../../config/db.js";
 
-const TripStopTime = sequelize.define(
-  "trip_stop_time",
+const BusRoute = sequelize.define(
+  "bus_route",
   {
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
     },
-    stop_id: {
+    bus_id: {
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: "stops",
+        model: "buses",
         key: "id",
       },
       onUpdate: "CASCADE",
       onDelete: "CASCADE",
     },
-    trip_id: {
+    route_id: {
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: "trips",
+        model: "routes",
         key: "id",
       },
       onUpdate: "CASCADE",
       onDelete: "CASCADE",
     },
-    approx_arrival_time: {
-      type: DataTypes.TIME,
-      allowNull: true,
-    },
-    approx_departure_time: {
-      type: DataTypes.TIME,
-      allowNull: true,
+    is_active: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
     },
   },
   {
-    tableName: "trip_stop_times",
-    timestamps: false,
+    tableName: "bus_routes",
+    timestamps: true,
     indexes: [
       {
-        fields: ["trip_id"],
-      },
-      {
-        fields: ["stop_id"],
-      },
-      {
         unique: true,
-        fields: ["trip_id", "stop_id"],
+        fields: ["bus_id", "route_id"], // Prevent duplicate bus-route pairs
       },
       {
-        fields: ["approx_arrival_time"],
+        fields: ["bus_id"],
+      },
+      {
+        fields: ["route_id"],
       },
     ],
   }
 );
 
-export default TripStopTime;
+export default BusRoute;

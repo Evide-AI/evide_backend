@@ -13,7 +13,13 @@ const Stop = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false,
       validate: {
-        len: [2, 100],
+        len: {
+          args: [2, 100],
+          msg: "Stop name must be between 2 and 100 characters long",
+        },
+        notEmpty: {
+          msg: "Stop name cannot be empty",
+        },
       },
     },
     location: {

@@ -1,5 +1,9 @@
 import express from "express";
-import { processStopsAndRoute, getRouteDetails } from "../controllers/routeController.js";
+import {
+  processStopsAndRoute,
+  getRouteDetails,
+  getRoutesByBusId,
+} from "../controllers/routeController.js";
 import { authenticate } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -54,5 +58,13 @@ router.post("/process-stops", processStopsAndRoute);
  * @returns {Object} Route data with stops
  */
 router.get("/:id", getRouteDetails);
+
+/**
+ * @route GET /api/routes/by-bus/:busId
+ * @desc Get all routes linked with the given bus with first and last stop details
+ * @access Private (Admin)
+ * @returns {Object} Array of routes with endpoint stops
+ */
+router.get("/by-bus/:busId", getRoutesByBusId);
 
 export default router;
