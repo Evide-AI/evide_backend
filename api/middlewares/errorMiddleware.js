@@ -1,3 +1,5 @@
+import { handleValidationError } from "../utils/validationErrorHandler.js";
+
 const notFound = (req, res, next) => {
   const error = new Error(`Not Found - ${req.originalUrl}`);
   res.status(404);
@@ -5,32 +7,29 @@ const notFound = (req, res, next) => {
 };
 
 const errorHandler = (err, req, res, next) => {
+  // Use the validation error handler for Sequelize errors
+  if (
+    err.name === "SequelizeValidationError" ||
+    err.name === "SequelizeUniqueConstraintError" ||
+    err.name === "SequelizeForeignKeyConstraintError"
+  ) {
+    const errorResponse = handleValidationError(err);
+    let statusCode = 400;
+    if (errorResponse.code === "DUPLICATE_ERROR") statusCode = 409;
+    return res.status(statusCode).json(errorResponse);
+  }
+
   let statusCode = res.statusCode === 200 ? 500 : res.statusCode;
   let message = err.message;
   let field = null;
   let errors = null;
 
-  // Sequelize Validation Error
-  if (err.name === "SequelizeValidationError") {
-    statusCode = 400;
-    message = "Validation error";
-    errors = err.errors.map((e) => ({ field: e.path, message: e.message }));
-  }
-
-  // Sequelize Unique Constraint Error
-  else if (err.name === "SequelizeUniqueConstraintError") {
-    statusCode = 409;
-    message = "Duplicate entry";
-    field = err.errors[0]?.path;
-  }
-
   // Custom App Error
-  else if (err.statusCode) {
+  if (err.statusCode) {
     statusCode = err.statusCode;
     message = err.message;
     field = err.field;
   }
-
   // PostgreSQL specific errors
   else if (err.parent?.code === "23505") {
     statusCode = 409;

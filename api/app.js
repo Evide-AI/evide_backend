@@ -8,13 +8,13 @@ import "./models/index.js";
 import authRoutes from "./routes/authRoutes.js";
 import busRoutes from "./routes/busRoutes.js";
 import routeRoutes from "./routes/routeRoutes.js";
-import tripRoutes from "./routes/tripRoutes.js"
+import tripRoutes from "./routes/tripRoutes.js";
 import { notFound, errorHandler } from "./middlewares/errorMiddleware.js";
 
 const app = express();
 
 const corsOptions = {
-  origin: ["http://localhost:3000", "http://localhost:3001"],
+  origin: ["http://localhost:3000", "http://localhost:5173"],
   credentials: true,
   optionsSuccessStatus: 200,
 };
