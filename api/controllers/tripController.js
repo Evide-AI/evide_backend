@@ -5,6 +5,7 @@ import TripStopTime from "../models/TripStopTime.js";
 import Stop from "../models/Stop.js";
 import Route from "../models/Route.js";
 import Bus from "../models/Bus.js";
+import { scheduleTripJobs } from "../../scheduler/queue.js";
 
 /**
  * @desc Create a trip with stop times
@@ -25,7 +26,7 @@ export const createTripWithStops = asyncHandler(async (req, res) => {
   if (!route_id || !bus_id || !scheduled_start_time || !scheduled_end_time) {
     throw new AppError(
       "route_id, bus_id, scheduled_start_time, and scheduled_end_time are required",
-      400
+      400,
     );
   }
 
@@ -48,7 +49,7 @@ export const createTripWithStops = asyncHandler(async (req, res) => {
     if (!stopExists) {
       throw new AppError(
         `Stop with ID ${stops[i].stop_id} does not exist`,
-        400
+        400,
       );
     }
   }
@@ -57,14 +58,14 @@ export const createTripWithStops = asyncHandler(async (req, res) => {
   if (trip_type && !validTripTypes.includes(trip_type)) {
     throw new AppError(
       `trip_type must be one of: ${validTripTypes.join(", ")}`,
-      400
+      400,
     );
   }
 
   if (scheduled_start_time >= scheduled_end_time) {
     throw new AppError(
       "scheduled_start_time must be before scheduled_end_time",
-      400
+      400,
     );
   }
 
@@ -80,7 +81,7 @@ export const createTripWithStops = asyncHandler(async (req, res) => {
   if (existingTrip) {
     throw new AppError(
       "A trip already exists with this route, bus, and start time",
-      400
+      400,
     );
   }
 
@@ -96,7 +97,7 @@ export const createTripWithStops = asyncHandler(async (req, res) => {
         scheduled_end_time,
         trip_type: trip_type || "regular",
       },
-      { transaction }
+      { transaction },
     );
 
     // Step 2: Create TripStopTimes
@@ -115,13 +116,20 @@ export const createTripWithStops = asyncHandler(async (req, res) => {
           approx_arrival_time: stopData.approx_arrival_time || null,
           approx_departure_time: stopData.approx_departure_time || null,
         },
-        { transaction }
+        { transaction },
       );
 
       tripStopTimes.push(tripStopTime);
     }
 
     await transaction.commit();
+
+    try {
+      await scheduleTripJobs(newTrip);
+      console.log("Schedule success")
+    } catch (error) {
+      console.error("Failed to schedule trip jobs:", error);
+    }
 
     res.status(201).json({
       success: true,
