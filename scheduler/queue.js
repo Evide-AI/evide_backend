@@ -5,6 +5,14 @@ const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 
 // Queue for adding trip start and end jobs
 export const tripQueue = new Queue("trip-scheduling", {
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 3000,
+      jitter: 0.5,
+    },
+  },
   connection: {
     url: REDIS_URL,
   },
@@ -15,31 +23,52 @@ export const tripQueue = new Queue("trip-scheduling", {
  * @param {object} trip - The trip object from Sequelize.
  */
 export const scheduleTripJobs = async (trip) => {
-  const startTime = new Date(trip.scheduled_start_time);
-  const endTime = new Date(trip.scheduled_end_time);
+  const now = new Date();
+  const [startHour, startMinute] = trip.scheduled_start_time.split(":");
+  const [endHour, endMinute] = trip.scheduled_end_time.split(":");
+
+  const startTime = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    startHour,
+    startMinute,
+  );
+  const endTime = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    endHour,
+    endMinute,
+  );
 
   // Unique job_id to prevent duplicates
   const start_job_id = `trip-${trip.id}-start`;
   const end_job_id = `trip-${trip.id}-end`;
 
-  const startCron = `${startTime.getMinutes()} ${startTime.getHours} * * *`;
+  const startCron = `${startTime.getMinutes()} ${startTime.getHours()} * * *`;
   const endCron = `${endTime.getMinutes()} ${endTime.getHours()} * * *`;
 
-  // Add repeatable jobs
-  await tripQueue.add(
-    "trip-job",
-    { tripId: trip.id, action: "start" },
-    {
-      repeat: { cron: startCron },
-      jobId: start_job_id,
-    },
-  );
-  await tripQueue.add(
-    "trip-job",
-    { tripId: trip.id, action: "end" },
-    {
-      repeat: { cron: endCron },
-      jobId: end_job_id,
-    },
-  );
+  // Add jobs to queue
+  try {
+    console.log(`Adding trip ${trip.id} to queue`);
+    await tripQueue.add(
+      "trip-job",
+      { tripId: trip.id, action: "start" },
+      {
+        repeat: { cron: startCron, tz: "Asia/Kolkata" },
+        jobId: start_job_id,
+      },
+    );
+    await tripQueue.add(
+      "trip-job",
+      { tripId: trip.id, action: "end" },
+      {
+        repeat: { cron: endCron, tz: "Asia/Kolkata" },
+        jobId: end_job_id,
+      },
+    );
+  } catch (error) {
+    console.error("Could not add to Redis", error);
+  }
 };

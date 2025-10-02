@@ -2,6 +2,7 @@ import { Worker } from "bullmq";
 import { createClient } from "redis";
 import "dotenv/config";
 import { connectDB } from "../config/db.js";
+import "../api/models/index.js";
 import Trip from "../api/models/Trip.js";
 import Bus from "../api/models/Bus.js";
 
@@ -17,12 +18,12 @@ export const startWorker = async () => {
   // Worker to process jobs from trip-scheduling queue
   // Add active buses to Redis with busInfo
   // And vice versa
-  new Worker(
+  const worker = new Worker(
     "trip-scheduling",
     async (job) => {
-      const { trip_id, action } = job.data;
+      const { tripId, action } = job.data;
 
-      const trip = await Trip.findByPk(trip_id, {
+      const trip = await Trip.findByPk(tripId, {
         include: [
           { model: Bus, attributes: ["id", "bus_number", "imei_number"] },
         ],
@@ -30,7 +31,7 @@ export const startWorker = async () => {
 
       if (!trip || !trip.bus) {
         console.warn(
-          `Trip ${trip_id} or its associated bus not found, skipping job.`,
+          `Trip ${tripId} or its associated bus not found, skipping job.`,
         );
         return;
       }
@@ -50,9 +51,11 @@ export const startWorker = async () => {
           trip.bus_id.toString(),
           JSON.stringify(busInfo),
         );
+        console.log(`Added trip ${trip.id} to Redis`);
       } else if (action === "end") {
         // Remove from active_buses
         await redisClient.hDel(ACTIVE_BUSES_KEY, trip.bus_id.toString());
+        console.log(`Removed trip ${trip.id} from Redis`);
       }
     },
     {
@@ -61,4 +64,14 @@ export const startWorker = async () => {
       },
     },
   );
+
+  worker.on("completed", (job) => {
+    console.log(`Job ${job.id} has completed`);
+  });
+
+  worker.on("failed", (job, err) => {
+    console.log(`Job ${job.id} has failed`, err);
+  });
+
+  console.log("Worker started and is listening for jobs");
 };
