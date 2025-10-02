@@ -5,6 +5,14 @@ const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 
 // Queue for adding trip start and end jobs
 export const tripQueue = new Queue("trip-scheduling", {
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 3000,
+      jitter: 0.5,
+    },
+  },
   connection: {
     url: REDIS_URL,
   },
