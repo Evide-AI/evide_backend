@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "tcp": "node tcp/server.js",
     "scheduler": "node scheduler/index.js",
     "docker:up": "docker-compose up --build",
     "docker:down": "docker-compose down",
