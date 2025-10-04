@@ -3,11 +3,9 @@ services:
     build: .
     ports:
       - "${API_PORT}:${API_PORT}" #API Server
-      - "${TCP_PORT}:${TCP_PORT}" #TCP Server
     environment:
       - NODE_ENV=${NODE_ENV}
       - API_PORT=${API_PORT}
-      - TCP_PORT=${TCP_PORT}
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=${DB_NAME}
@@ -29,6 +27,34 @@ services:
     networks:
       - evide-network
     command: sh -c "npm run migrate && npm run dev"
+
+  tcp-server:
+    build: .
+    ports:
+      - "${TCP_PORT}:${TCP_PORT}" #TCP Server
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - TCP_PORT=${TCP_PORT}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_URL=redis://redis:6379
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - .:/app
+      - /app/node_modules
+    restart: unless-stopped
+    networks:
+      - evide-network
+    command: npm run tcp
 
   scheduler:
     build: .
